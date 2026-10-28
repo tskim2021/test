@@ -28,6 +28,7 @@ export async function createShop(env = process.env) {
     currency: (env.SHOP_CURRENCY || 'USD').toUpperCase(),
     usdKrw: env.SHOP_USD_KRW,
     shopUrl: (env.SHOP_URL || 'https://ameyokovip.com').replace(/\/+$/, ''),
+    statusPaid: env.SHOP_STATUS_PAID || '입금',
   });
 }
 
@@ -127,12 +128,21 @@ function amountSql(amounts, rate) {
 
 export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
   if (!/^[A-Za-z0-9_]*$/.test(prefix)) throw new Error('SHOP_TABLE_PREFIX 형식 오류');
-  const { currency = 'KRW', usdKrw = null, shopUrl = 'https://ameyokovip.com' } = opts;
+  const { currency = 'KRW', usdKrw = null, shopUrl = 'https://ameyokovip.com', statusPaid = '입금' } = opts;
   const O = `${prefix}shop_order`;
   const C = `${prefix}shop_cart`;
   const I = `${prefix}shop_item`;
   let cache = { key: '', at: 0, rows: [] };
   let rateCache = { at: 0, v: null };
+  let hasShopMemoCol = null;
+  // 그누보드 관리자 주문 화면의 '상점메모(od_shop_memo)' 컬럼이 있는지(없으면 메모는 남기지 않는다)
+  async function hasShopMemo() {
+    if (hasShopMemoCol === null) {
+      const [r] = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = 'od_shop_memo'`, [O]);
+      hasShopMemoCol = r.length > 0;
+    }
+    return hasShopMemoCol;
+  }
 
   async function rateFromDb() {
     const [cols] = await pool.query(
@@ -208,6 +218,7 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
   return {
     close: () => pool.end(),
     currency,
+    statusPaid,
     getRate,
     // 연결 확인용: 주문 테이블 건수
     async ping() {
@@ -284,10 +295,14 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       return Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, v.map((o) => shapeOrder(o, items, rate))]));
     },
 
-    // 그누보드 관리자의 '입금' 처리와 같은 결과로 바꾼다(입금액=주문 미수금 전액, 미수금 0, 입금시간, 상태, 장바구니 상태). 한 트랜잭션.
+    // 그누보드 관리자의 '입금' 처리와 같은 결과로 바꾼다. 한 트랜잭션.
+    //   주문: od_status=입금(SHOP_STATUS_PAID), od_receipt_price += od_misu, od_misu = 0, od_receipt_time = 처리 시각(한국시간)
+    //   장바구니: ct_status = 입금
+    //   상점메모(od_shop_memo, 관리자 주문 화면에 표시): 처리 일시/입금 정보/사유를 한 줄 덧붙인다(컬럼이 있을 때)
     // expectKrw 가 있으면 주문 미수금의 원화 환산액이 그 입금액과 맞을 때만 처리한다(자동 일치 처리). null 이면 금액 검사 없이 처리(수동 처리).
-    async confirm(odId, { expectKrw = null } = {}) {
+    async confirm(odId, { expectKrw = null, note = '' } = {}) {
       const rate = (await getRate())?.rate || null;
+      const memoCol = await hasShopMemo();
       const conn = await pool.getConnection();
       try {
         await conn.beginTransaction();
@@ -295,11 +310,15 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
         if (!rows.length) throw httpErr(404, '주문을 찾을 수 없습니다');
         if (rows[0].od_status !== '주문') throw httpErr(409, `이미 처리된 주문입니다 (상태: ${rows[0].od_status})`);
         if (expectKrw !== null && !amountHit(rows[0].od_misu, { amount: expectKrw }, rate)) throw httpErr(409, '주문 금액이 입금액과 다릅니다');
-        await conn.query(
-          `UPDATE ${O} SET od_receipt_price = od_receipt_price + od_misu, od_misu = 0,
-                  od_receipt_time = ?, od_status = '입금' WHERE od_id = ?`,
-          [kstNow(), odId]);
-        await conn.query(`UPDATE ${C} SET ct_status = '입금' WHERE od_id = ? AND ct_status = '주문'`, [odId]);
+        const now = kstNow();
+        const sets = [`od_receipt_price = od_receipt_price + od_misu`, `od_misu = 0`, `od_receipt_time = ?`, `od_status = ?`];
+        const args = [now, statusPaid];
+        if (memoCol && note) {
+          sets.push(`od_shop_memo = CONCAT(IFNULL(od_shop_memo, ''), IF(IFNULL(od_shop_memo, '') = '', '', CHAR(10)), ?)`);
+          args.push(`[입금모니터 ${now}] ${note}`);
+        }
+        await conn.query(`UPDATE ${O} SET ${sets.join(', ')} WHERE od_id = ?`, [...args, odId]);
+        await conn.query(`UPDATE ${C} SET ct_status = ? WHERE od_id = ? AND ct_status = '주문'`, [statusPaid, odId]);
         await conn.commit();
       } catch (e) {
         await conn.rollback();
@@ -307,6 +326,30 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       } finally {
         conn.release();
       }
+    },
+
+    // 점검용(읽기 전용): 쇼핑몰이 쓰는 상태 값, 관리자가 직접 처리한 주문과 이 모니터가 처리한 주문의 값 비교
+    async check(monitorOdIds = []) {
+      const [st] = await pool.query(`SELECT od_status AS s, COUNT(*) AS n FROM ${O} GROUP BY od_status ORDER BY n DESC`);
+      const [cs] = await pool.query(`SELECT ct_status AS s, COUNT(*) AS n FROM ${C} GROUP BY ct_status ORDER BY n DESC`);
+      const [cols] = await pool.query(
+        `SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = DATABASE()
+           AND ((table_name = ? AND column_name IN ('od_shop_memo','od_receipt_time','od_status')) OR (table_name = ? AND column_name IN ('ct_history','ct_status')))`, [O, C]);
+      const memo = await hasShopMemo();
+      const f = `od_id, od_status, od_settle_case, od_misu, od_receipt_price, od_receipt_time, od_time${memo ? ", (IFNULL(od_shop_memo,'') <> '') AS has_shop_memo" : ''}`;
+      const ids = monitorOdIds.length ? monitorOdIds : ['\u0000'];
+      const [byShop] = await pool.query(
+        `SELECT ${f} FROM ${O} WHERE od_status <> '주문' AND od_receipt_time > '2000-01-01' AND od_id NOT IN (?) ORDER BY od_receipt_time DESC LIMIT 4`, [ids]);
+      const [byMonitor] = monitorOdIds.length ? await pool.query(`SELECT ${f} FROM ${O} WHERE od_id IN (?) ORDER BY od_receipt_time DESC LIMIT 4`, [monitorOdIds]) : [[]];
+      const all = [...byShop, ...byMonitor].map((o) => o.od_id);
+      const [cart] = all.length ? await pool.query(`SELECT od_id, GROUP_CONCAT(DISTINCT ct_status) AS ct FROM ${C} WHERE od_id IN (?) GROUP BY od_id`, [all]) : [[]];
+      const ct = Object.fromEntries(cart.map((r) => [String(r.od_id), r.ct]));
+      const shape = (o) => ({ ...o, od_id: String(o.od_id), od_misu: num(o.od_misu), od_receipt_price: num(o.od_receipt_price), cart_status: ct[String(o.od_id)] || '' });
+      return {
+        status_paid_setting: statusPaid, order_statuses: st, cart_statuses: cs,
+        columns: cols.map((c) => `${c.t}.${c.c}`), has_shop_memo_column: memo,
+        processed_by_shop_admin: byShop.map(shape), processed_by_monitor: byMonitor.map(shape),
+      };
     },
   };
 }

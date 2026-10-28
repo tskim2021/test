@@ -7,6 +7,9 @@ export const kstEnd = (d) => new Date(`${d}T23:59:59.999+09:00`).toISOString();
 
 const BASE = 'SELECT d.*, m.od_id AS order_id, m.manual AS order_manual FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id';
 
+// done: 'hide'=처리된 입금 숨김, 'only'=처리된 입금만, 'all'=전부(기본)
+const doneCond = (done) => (done === 'hide' ? 'm.od_id IS NULL' : done === 'only' ? 'm.od_id IS NOT NULL' : null);
+
 export function openDb(path = process.env.DB_PATH || './deposits.db') {
   const db = new DatabaseSync(path);
   db.exec(`
@@ -89,9 +92,10 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
     // 주문일자 검색용: 이름/금액/연결 주문번호 중 하나라도 걸리는 입금(숨김 제외)을 전부 돌려준다(페이지 처리는 호출 쪽에서).
-    candidates({ q, names = [], ranges = [], odIds = [], limit = 5000 } = {}) {
+    candidates({ q, names = [], ranges = [], odIds = [], done = 'all', limit = 5000 } = {}) {
       const where = ['d.hidden = 0'];
       const args = [];
+      if (doneCond(done)) where.push(doneCond(done));
       // 인자는 SQL 의 ? 순서와 같아야 한다: q 조건이 먼저, 그 다음 json_each 세 개(이름 목록, 금액 범위 [[최소,최대]…], 주문번호 목록)
       if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       args.push(JSON.stringify(names), JSON.stringify(ranges), JSON.stringify(odIds));
@@ -102,24 +106,26 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
         ORDER BY d.received_at DESC, d.id DESC LIMIT ${Number(limit)}`).all(...args);
     },
     // 기간(입금 시각)에 해당하는 입금 전부(페이지 처리 없음)
-    all({ from, to, q, limit = 5000 } = {}) {
+    all({ from, to, q, done = 'all', limit = 5000 } = {}) {
       const where = ['d.hidden = 0'];
       const args = [];
+      if (doneCond(done)) where.push(doneCond(done));
       if (from) { where.push('d.received_at >= ?'); args.push(kstStart(from)); }
       if (to) { where.push('d.received_at <= ?'); args.push(kstEnd(to)); }
       if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       return db.prepare(`${BASE} WHERE ${where.join(' AND ')} ORDER BY d.received_at DESC, d.id DESC LIMIT ${Number(limit)}`).all(...args);
     },
     // from/to: 'YYYY-MM-DD'(한국시간 기준, 양 끝 포함), q: 입금자 부분일치. 조건에 맞는 건수/합계도 함께 돌려준다.
-    search({ from, to, q, limit = 20, offset = 0 } = {}) {
-      const where = ['hidden = 0'];
+    search({ from, to, q, done = 'all', limit = 20, offset = 0 } = {}) {
+      const where = ['d.hidden = 0'];
       const args = [];
-      if (from) { where.push('received_at >= ?'); args.push(kstStart(from)); }
-      if (to) { where.push('received_at <= ?'); args.push(kstEnd(to)); }
-      if (q) { where.push("sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
-      const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
-      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount),0) AS total FROM deposits ${w}`).get(...args);
-      const rows = db.prepare(`SELECT d.*, m.od_id AS order_id, m.manual AS order_manual FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w} ORDER BY received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
+      if (doneCond(done)) where.push(doneCond(done));
+      if (from) { where.push('d.received_at >= ?'); args.push(kstStart(from)); }
+      if (to) { where.push('d.received_at <= ?'); args.push(kstEnd(to)); }
+      if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
+      const w = `WHERE ${where.join(' AND ')}`;
+      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(d.amount),0) AS total FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w}`).get(...args);
+      const rows = db.prepare(`${BASE} ${w} ORDER BY d.received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
       return { rows, count: agg.count, total: agg.total };
     },
   };

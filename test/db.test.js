@@ -119,3 +119,21 @@ test('푸시 발송 기록', () => {
   assert.equal(log[1].label, '박지은 35,900원');
   assert.equal(db.pushLog(1).length, 1);
 });
+
+test('처리 완료 필터: 기본(hide)은 처리된 입금 제외, only 는 처리된 것만', () => {
+  const db = mk();
+  const all = db.search({}).rows;
+  const k = all.find((r) => r.sender === '김미희');
+  db.claim(k.id, 'A9');
+  const hide = db.search({ done: 'hide' });
+  assert.equal(hide.count, 2);
+  assert.ok(!hide.rows.some((r) => r.id === k.id));
+  assert.equal(hide.total, all.reduce((s, r) => s + r.amount, 0) - k.amount);
+  const only = db.search({ done: 'only' });
+  assert.deepEqual([only.count, only.total, only.rows[0].order_id], [1, k.amount, 'A9']);
+  assert.equal(db.search({ done: 'all' }).count, 3);
+  assert.equal(db.all({ done: 'only' }).length, 1);
+  assert.equal(db.all({ done: 'hide' }).length, 2);
+  assert.equal(db.candidates({ names: ['김미희'], ranges: [], odIds: [], done: 'hide' }).length, 0);
+  assert.equal(db.candidates({ names: ['김미희'], ranges: [], odIds: [], done: 'only' }).length, 1);
+});

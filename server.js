@@ -23,16 +23,16 @@ const shop = await createShop();
 shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건`)).catch((e) => console.error('쇼핑몰 DB 연결 실패:', e.message));
 // 주문일자/전체 검색: 쇼핑몰 주문 시각이 기간에 드는 주문과 관계(이름·금액·연결)가 있는 입금을 모은다.
 // field='all' 이면 입금 시각이 기간에 드는 입금도 합친다.
-async function orderDateRows({ field, from, to, q }) {
+async function orderDateRows({ field, from, to, q, done }) {
   const orders = await shop.ordersInRange(from, to);
   const rate = (await shop.getRate())?.rate || null;
   const { names, ranges, odIds } = orderKeys(orders, rate);
-  const cand = db.candidates({ q, names: [...names], ranges, odIds: [...odIds] });
+  const cand = db.candidates({ q, done, names: [...names], ranges, odIds: [...odIds] });
   const related = relatedDepositIds(orders, cand, rate);
   const rows = cand.filter((d) => related.has(d.id));
   if (field === 'all') {
     const have = new Set(rows.map((r) => r.id));
-    for (const d of db.all({ from, to, q })) if (!have.has(d.id)) rows.push(d);
+    for (const d of db.all({ from, to, q, done })) if (!have.has(d.id)) rows.push(d);
   }
   return rows.sort((a, b) => b.received_at.localeCompare(a.received_at) || b.id - a.id);
 }
@@ -125,18 +125,19 @@ const server = http.createServer(async (req, res) => {
       const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
       // datefield: paid=결제일자(입금 받은 날, 기본), order=주문일자(쇼핑몰 주문 시각), all=전체(둘 중 하나라도)
+      const done = url.searchParams.get('done') === 'only' ? 'only' : 'hide'; // 처리 완료된 입금: 기본 숨김, done=only 면 그것만
       const field = ['all', 'order', 'paid'].includes(url.searchParams.get('datefield')) ? url.searchParams.get('datefield') : 'paid';
       let rows, count, total;
       let matchError = null;
       if (field !== 'paid' && shop && ADMIN_TOKEN && (from || to)) {
         try {
-          const all = await orderDateRows({ field, from, to, q });
+          const all = await orderDateRows({ field, from, to, q, done });
           count = all.length;
           total = all.reduce((s2, r) => s2 + r.amount, 0);
           rows = all.slice((page - 1) * limit, page * limit);
         } catch (e) { matchError = '주문일자 조회 실패: ' + e.message; console.error(matchError); }
       }
-      if (!rows) ({ rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit }));
+      if (!rows) ({ rows, count, total } = db.search({ from, to, q, done, limit, offset: (page - 1) * limit }));
       let levels = new Map();
       if (shop && ADMIN_TOKEN) {
         try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = '주문 매칭 조회 실패: ' + e.message; console.error(matchError); }
@@ -147,6 +148,29 @@ const server = http.createServer(async (req, res) => {
       }
       const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
+    }
+
+    // 쇼핑몰 점검(관리자): 쇼핑몰이 쓰는 주문 상태 값, 관리자가 직접 처리한 주문 vs 이 모니터가 처리한 주문의 DB 값 비교
+    if (req.method === 'GET' && url.pathname === '/shop-check') {
+      res.setHeader('cache-control', 'no-store');
+      if (!isAdmin(req, url)) { res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('unauthorized'); }
+      if (!shop) return json(res, 503, { error: '쇼핑몰 DB가 설정되지 않았습니다' });
+      const monitorIds = db.processedSince('1970-01-01T00:00:00.000Z', 200).map((r) => r.od_id).slice(-20);
+      const data = await shop.check(monitorIds);
+      if (url.searchParams.get('format') === 'json') return json(res, 200, data);
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const tbl = (rows, cols) => `<table><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr>${rows.map((r) => `<tr>${cols.map((c) => `<td>${esc(r[c])}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${cols.length}">없음</td></tr>`}</table>`;
+      const oc = ['od_id', 'od_status', 'cart_status', 'od_settle_case', 'od_misu', 'od_receipt_price', 'od_receipt_time', 'od_time', 'has_shop_memo'];
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>쇼핑몰 점검</title>
+<style>body{font:15px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:16px;max-width:1000px;margin:0 auto}table{border-collapse:collapse;margin:6px 0 18px}th,td{border:1px solid #ddd;padding:5px 9px;text-align:left;font-size:13px}th{background:#f3f4f6}</style>
+<h2>쇼핑몰 점검 (읽기 전용)</h2>
+<p>이 모니터가 입금 처리 시 쓰는 상태: <b>${esc(data.status_paid_setting)}</b> · 상점메모(od_shop_memo) 컬럼: <b>${data.has_shop_memo_column ? '있음 (처리 흔적을 남김)' : '없음'}</b></p>
+<h3>주문 상태(od_status)별 건수</h3>${tbl(data.order_statuses, ['s', 'n'])}
+<h3>장바구니 상태(ct_status)별 건수</h3>${tbl(data.cart_statuses, ['s', 'n'])}
+<h3>쇼핑몰 관리자가 직접 처리한 최근 주문</h3>${tbl(data.processed_by_shop_admin, oc)}
+<h3>이 모니터가 처리한 최근 주문</h3>${tbl(data.processed_by_monitor, oc)}
+<p>두 표의 <b>od_status, cart_status, od_receipt_price, od_receipt_time</b>이 같은 모양이면 관리자 처리와 같은 결과입니다.</p></html>`);
     }
 
     // 푸시 발송 기록 조회: /push-log?token=접속토큰  (&format=json 도 가능)
@@ -301,7 +325,9 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
       }
       if (!db.claim(deposit.id, odId, manual)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
       try {
-        await shop.confirm(odId, { expectKrw: manual ? null : deposit.amount });
+        const memoNow = db.get(deposit.id).memo;
+        const note = `입금 ${deposit.sender || '(입금자 미확인)'} ${deposit.amount.toLocaleString('ko-KR')}원 확인 → ${shop.statusPaid} 처리${manual ? ' (수동)' : ''}${memoNow ? ': ' + memoNow : ''}`;
+        await shop.confirm(odId, { expectKrw: manual ? null : deposit.amount, note });
       } catch (e) {
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });

@@ -174,3 +174,21 @@ test('DB(USD): 환산 일치, 이미지·상품 링크·원화 표기', { skip }
   const noImg = (await shop.relatedFor({ sender: '곽도빈', amount: 26400 })).full[0].items;
   assert.ok(noImg.every((x) => typeof x.image === 'string'));
 });
+
+test('DB: 입금 처리 — 상태/처리 시각/장바구니/상점메모(관리자 화면 표시용)', { skip }, async (t) => {
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'KRW' });
+  after(() => shop.close());
+  const before = await shop.check(['A2026102807']);
+  if (!before.has_shop_memo_column) return t.skip('테스트 DB에 od_shop_memo 컬럼 없음');
+  if ((await shop.relatedFor({ sender: '정수빈', amount: 50000 })).full.length === 0) return t.skip('이미 처리된 테스트 데이터(시드를 다시 넣으세요)');
+  await shop.confirm('A2026102807', { expectKrw: 50000, note: '입금 정수빈 50,000원 확인 → 입금 처리: 사유 테스트' });
+  const c = await shop.check(['A2026102807']);
+  const o = c.processed_by_monitor[0];
+  assert.equal(o.od_status, '입금');
+  assert.equal(o.cart_status, '입금');
+  assert.equal(o.od_misu, 0);
+  assert.equal(o.od_receipt_price, 50000);
+  assert.match(String(o.od_receipt_time), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+  assert.equal(Number(o.has_shop_memo), 1);
+  await assert.rejects(() => shop.confirm('A2026102807', { note: 'x' }), /이미 처리된 주문/); // 두 번 처리 불가
+});
