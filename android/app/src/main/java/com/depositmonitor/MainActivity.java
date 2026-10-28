@@ -182,7 +182,9 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, pad, pad, pad);
 
-        root.addView(text("입금 모니터", 22, true));
+        String ver = "?";
+        try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        root.addView(text("입금 모니터 v" + ver, 22, true));
         root.addView(text("카카오뱅크 입금 알림을 서버로 전송하고, 서버의 처리 상황을 푸시로 알려 줍니다.", 14, false));
 
         status = text("", 15, true);
