@@ -97,7 +97,25 @@ const server = http.createServer(async (req, res) => {
       const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
       const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
-      return json(res, 200, { deposits: rows, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN });
+      let matched = new Set();
+      if (shop && ADMIN_TOKEN) {
+        try { matched = await shop.matchedIds(rows.filter((r) => !r.order_id)); } catch (e) { console.error('주문 매칭 조회 실패:', e.message); }
+      }
+      let orderItems = {};
+      if (shop && ADMIN_TOKEN) {
+        try { orderItems = await shop.itemsByOrder([...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))]); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
+      }
+      const deposits = rows.map((r) => ({ ...r, matched: matched.has(r.id), order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
+      return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN });
+    }
+
+    // 선택 삭제: DB에서 지우지 않고 목록에서만 숨긴다(hidden=1) — 관리자 전용
+    if (req.method === 'POST' && url.pathname === '/api/deposits/hide') {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      let ids;
+      try { ids = JSON.parse(await readBody(req)).ids; } catch { ids = null; }
+      if (!Array.isArray(ids) || !ids.length || ids.length > 200 || !ids.every((n) => Number.isInteger(n) && n > 0)) return json(res, 400, { error: 'ids 필요(최대 200개)' });
+      return json(res, 200, { ok: true, hidden: db.hide(ids) });
     }
 
     // 입금 1건에 대한 주문 후보(입금자명+금액 일치)와 장바구니 상품 조회 — 관리자 전용

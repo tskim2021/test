@@ -21,6 +21,11 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
   const insert = db.prepare(
     'INSERT OR IGNORE INTO deposits (dedupe_key, amount, sender, balance, raw, received_at) VALUES (?,?,?,?,?,?)'
   );
+  // 소프트 삭제: hidden=1 이면 목록/합계에서 빠지지만 DB에는 남는다(중복 방지 키도 유지).
+  if (!db.prepare('PRAGMA table_info(deposits)').all().some((c) => c.name === 'hidden')) {
+    db.exec('ALTER TABLE deposits ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0');
+  }
+  const hideStmt = db.prepare('UPDATE deposits SET hidden = 1 WHERE id = ? AND hidden = 0');
   db.exec(`
     CREATE TABLE IF NOT EXISTS matches (
       deposit_id INTEGER PRIMARY KEY,
@@ -43,13 +48,18 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return r.changes ? byId.get(key) : null;
     },
     get: (id) => getOne.get(id),
+    hide(ids) {
+      let n = 0;
+      for (const id of ids) n += hideStmt.run(id).changes;
+      return n;
+    },
     // 입금 1건을 주문 1건에 연결한다. 이미 연결됐거나 그 주문이 다른 입금과 연결돼 있으면 false.
     claim: (depositId, odId) => claimStmt.run(depositId, String(odId), new Date().toISOString()).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
     // from/to: 'YYYY-MM-DD'(한국시간 기준, 양 끝 포함), q: 입금자 부분일치. 조건에 맞는 건수/합계도 함께 돌려준다.
     search({ from, to, q, limit = 20, offset = 0 } = {}) {
-      const where = [];
+      const where = ['hidden = 0'];
       const args = [];
       if (from) { where.push('received_at >= ?'); args.push(kstStart(from)); }
       if (to) { where.push('received_at <= ?'); args.push(kstEnd(to)); }

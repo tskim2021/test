@@ -33,6 +33,24 @@ export function shopFromPool(pool, prefix = 'g5_') {
       const [[r]] = await pool.query(`SELECT COUNT(*) AS n FROM ${O}`);
       return Number(r.n);
     },
+    // 주문번호 목록 -> { od_id: [{name, option, qty}] } (목록에 작게 보여줄 용도)
+    async itemsByOrder(odIds) {
+      const out = {};
+      if (!odIds.length) return out;
+      const [items] = await pool.query(
+        `SELECT od_id, it_name, io_id, ct_qty FROM ${C} WHERE od_id IN (?) ORDER BY ct_id`, [odIds]);
+      for (const i of items) (out[String(i.od_id)] ||= []).push({ name: i.it_name, option: i.io_id || '', qty: i.ct_qty });
+      return out;
+    },
+    // 입금 목록 중 '주문' 상태 주문과 입금자명+금액이 일치하는 입금 id 집합(쿼리 1번).
+    async matchedIds(list) {
+      const amounts = [...new Set(list.map((d) => d.amount))];
+      if (!amounts.length) return new Set();
+      const [orders] = await pool.query(
+        `SELECT od_misu, od_name, od_deposit_name FROM ${O} WHERE od_status = '주문' AND od_misu IN (?)`, [amounts]);
+      const keys = new Set(orders.map((o) => `${Number(o.od_misu)}|${norm(o.od_deposit_name || o.od_name)}`));
+      return new Set(list.filter((d) => keys.has(`${d.amount}|${norm(d.sender)}`)).map((d) => d.id));
+    },
     // 입금자명과 금액이 모두 일치하는 '주문' 상태 주문(미수금 = 입금액)과 그 장바구니 상품을 돌려준다.
     async candidatesFor({ sender, amount }) {
       const name = norm(sender);

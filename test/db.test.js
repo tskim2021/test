@@ -45,3 +45,15 @@ test('날짜 형식 검증', () => {
   assert.equal(kstStart('2026-10-28'), '2026-10-27T15:00:00.000Z');
   assert.equal(kstEnd('2026-10-28'), '2026-10-28T14:59:59.999Z');
 });
+
+test('소프트 삭제: 목록/합계에서 빠지지만 DB에는 남고 중복 저장도 막는다', () => {
+  const db = mk();
+  const before = db.search({});
+  assert.equal(db.hide([before.rows[0].id, before.rows[1].id]), 2);
+  assert.equal(db.hide([before.rows[0].id]), 0); // 이미 숨김
+  const after = db.search({});
+  assert.equal(after.count, 1);
+  assert.equal(after.total, before.total - before.rows[0].amount - before.rows[1].amount);
+  assert.ok(db.get(before.rows[0].id)); // 행은 남아 있음
+  assert.equal(db.add({ amount: 3000, sender: '100%_할인', balance: null, raw: 'c' }, new Date('2026-10-28T06:00:00Z')), null); // 같은 알림 재전송은 무시
+});

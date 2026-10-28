@@ -42,10 +42,22 @@
   .right { display:flex; align-items:center; gap:12px; }
   .btn { border:1px solid var(--accent); color:var(--accent); background:transparent; border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
   .btn.primary { background:var(--accent); color:#fff; font-weight:600; }
+  li.matched { background:color-mix(in srgb, var(--accent) 13%, transparent); }
+  li.done { background:color-mix(in srgb, var(--accent) 26%, transparent); }
+  .lhs { display:flex; align-items:center; gap:12px; min-width:0; }
+  .lhs input[type=checkbox], .toolbar input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+  .toolbar { justify-content:space-between; }
+  .toolbar label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); }
+  .btn.danger { border-color:#c0392b; color:#c0392b; }
+  .btn:disabled { opacity:.4; cursor:default; }
   .badge { font-size:12px; color:var(--muted); background:var(--chip); border-radius:999px; padding:3px 10px; white-space:nowrap; }
-  #modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:flex-start; justify-content:center; padding:5vh 16px; overflow:auto; z-index:10; }
-  #modal[hidden] { display:none; }
-  .sheet { background:var(--card); border-radius:14px; width:100%; max-width:560px; padding:18px; }
+  /* 오른쪽에서 밀려 나오는 상세 패널 */
+  #modal { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:10; opacity:0; pointer-events:none; transition:opacity .2s; }
+  #modal.open { opacity:1; pointer-events:auto; }
+  .sheet { position:absolute; top:0; right:0; bottom:0; width:min(480px,100%); background:var(--card); padding:18px; overflow:auto;
+           border-radius:14px 0 0 14px; box-shadow:-8px 0 24px rgba(0,0,0,.18); transform:translateX(100%); transition:transform .25s ease; }
+  #modal.open .sheet { transform:none; }
+  .ordinfo { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4; overflow-wrap:anywhere; }
   .sheet h2 { font-size:17px; margin:0 0 4px; }
   .sheet .sub { color:var(--muted); font-size:13px; margin-bottom:12px; }
   .order { border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; }
@@ -85,6 +97,10 @@
       <button class="chip" data-range="lastWeek">저번주</button>
       <button class="chip" data-range="all">전체</button>
     </div>
+    <div class="row toolbar">
+      <label><input type="checkbox" id="selAll"> 전체 선택</label>
+      <span><span id="selCount" class="status"></span> <button class="btn danger" id="hideBtn" disabled>선택 삭제</button></span>
+    </div>
     <div class="row">
       <input type="date" id="from" aria-label="시작일자">
       <span class="sep">~</span>
@@ -108,13 +124,14 @@
     <button id="next">다음</button>
   </div>
 </main>
-<div id="modal" hidden><div class="sheet" id="sheet"></div></div>
+<div id="modal"><div class="sheet" id="sheet"></div></div>
 <script>
 const $ = (id) => document.getElementById(id);
 const won = (n) => n.toLocaleString('ko-KR') + '원';
 let token = localStorage.getItem('viewToken') || '';
 const state = { from: '', to: '', q: '', limit: 20, page: 1, range: 'today' };
 let es, highlightId = null, reqSeq = 0, shopEnabled = false;
+const selected = new Set();
 let adminToken = localStorage.getItem('adminToken') || '';
 
 // ---- 날짜 계산 (한국시간 기준 'YYYY-MM-DD') ----
@@ -140,20 +157,31 @@ function fmtTime(iso) {
 }
 function renderRow(d) {
   const li = document.createElement('li');
-  if (d.id === highlightId) li.className = 'new';
+  li.className = [d.id === highlightId ? 'new' : '', d.order_id ? 'done' : d.matched ? 'matched' : ''].filter(Boolean).join(' ');
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = selected.has(d.id); cb.dataset.id = d.id;
+  cb.onchange = () => { cb.checked ? selected.add(d.id) : selected.delete(d.id); updateToolbar(); };
+  const lhs = document.createElement('div'); lhs.className = 'lhs';
   const left = document.createElement('div');
   const who = document.createElement('div'); who.className = 'who'; who.textContent = d.sender || '(입금자 미확인)';
   const when = document.createElement('div'); when.className = 'when'; when.textContent = fmtTime(d.received_at);
   left.append(who, when);
+  if (d.order_id) {
+    const info = document.createElement('div'); info.className = 'ordinfo';
+    const items = (d.order_items || []).map((i) => `${i.name}${i.option ? ` (${i.option})` : ''} ×${i.qty}`).join(' / ');
+    info.textContent = `주문 ${d.order_id}${items ? ' · ' + items : ''}`;
+    left.append(info);
+  }
   const amt = document.createElement('div'); amt.className = 'amt'; amt.textContent = '+' + won(d.amount);
   const right = document.createElement('div'); right.className = 'right';
   if (d.order_id) {
     const b = document.createElement('span'); b.className = 'badge'; b.textContent = '주문완료 #' + d.order_id; right.append(b);
   } else if (shopEnabled) {
+    if (d.matched) { const m = document.createElement('span'); m.className = 'badge'; m.textContent = '일치 주문 있음'; right.append(m); }
     const b = document.createElement('button'); b.className = 'btn'; b.textContent = '주문 확인'; b.onclick = () => openMatch(d); right.append(b);
   }
   right.append(amt);
-  li.append(left, right);
+  lhs.append(cb, left);
+  li.append(lhs, right);
   return li;
 }
 function beep() {
@@ -191,6 +219,7 @@ async function load() {
   $('sumLabel').textContent = sumLabel();
   $('sumTotal').textContent = won(data.total);
   $('sumCount').textContent = data.count + '건';
+  selected.clear(); updateToolbar();
   const list = $('list'); list.replaceChildren();
   if (!data.deposits.length) list.innerHTML = '<div class="empty">조건에 맞는 입금 내역이 없습니다</div>';
   data.deposits.forEach((d) => list.append(renderRow(d)));
@@ -220,9 +249,33 @@ function connect() {
   });
 }
 
+// ---- 선택 삭제(숨김) ----
+function updateToolbar() {
+  const boxes = [...document.querySelectorAll('#list input[type=checkbox]')];
+  $('selCount').textContent = selected.size ? `${selected.size}건 선택` : '';
+  $('hideBtn').disabled = !selected.size;
+  $('selAll').checked = boxes.length > 0 && boxes.every((b) => b.checked);
+}
+$('selAll').onchange = () => {
+  document.querySelectorAll('#list input[type=checkbox]').forEach((b) => {
+    b.checked = $('selAll').checked;
+    $('selAll').checked ? selected.add(Number(b.dataset.id)) : selected.delete(Number(b.dataset.id));
+  });
+  updateToolbar();
+};
+$('hideBtn').onclick = async () => {
+  if (!selected.size) return;
+  if (!confirm(`선택한 ${selected.size}건을 목록에서 삭제할까요?\n(DB에는 그대로 남고 화면에서만 숨겨집니다)`)) return;
+  const r = await adminFetch('/api/deposits/hide', { method: 'POST', body: JSON.stringify({ ids: [...selected] }) });
+  if (!r) return;
+  if (!r.ok) { alert((await r.json()).error || '삭제 실패'); return; }
+  load();
+};
+
 // ---- 주문 확인(관리자) ----
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const closeModal = () => { $('modal').hidden = true; };
+const closeModal = () => { $('modal').classList.remove('open'); };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
 async function adminFetch(path, opts = {}) {
   const send = (t) => fetch(path, { ...opts, headers: { ...(opts.headers || {}), authorization: 'Bearer ' + t } });
@@ -240,7 +293,7 @@ async function openMatch(d) {
   const r = await adminFetch(`/api/deposits/${d.id}/matches`);
   if (!r) return;
   const sheet = $('sheet'); sheet.replaceChildren();
-  $('modal').hidden = false;
+  requestAnimationFrame(() => $('modal').classList.add('open'));
   if (!r.ok) { sheet.append(el('h2', '', '조회 실패'), el('div', 'err', (await r.json()).error || r.status), actionsRow()); return; }
   const data = await r.json();
   sheet.append(el('h2', '', `${d.sender || '(입금자 미확인)'} · ${won(d.amount)}`),
