@@ -1,7 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
-import { openDb } from './db.js';
+import { openDb, isDate } from './db.js';
 import { parseNotification } from './parser.js';
 
 const PORT = Number(process.env.PORT || 3000);
@@ -82,9 +82,17 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // 조회: ?from=YYYY-MM-DD&to=YYYY-MM-DD&q=입금자&limit=10|20|50|100&page=1  (날짜는 한국시간 기준)
     if (req.method === 'GET' && url.pathname === '/api/deposits') {
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
-      return json(res, 200, { deposits: db.recent(200), today: db.today() });
+      const from = url.searchParams.get('from') || '';
+      const to = url.searchParams.get('to') || '';
+      if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: 'invalid date' });
+      const limit = [10, 20, 50, 100].includes(Number(url.searchParams.get('limit'))) ? Number(url.searchParams.get('limit')) : 20;
+      const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
+      const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
+      const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
+      return json(res, 200, { deposits: rows, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)) });
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {

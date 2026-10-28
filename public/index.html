@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>실시간 입금 내역</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2128; --muted:#6b7480; --accent:#1f9d55; --line:#e6e8ec; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f26; --text:#e8eaed; --muted:#8b949e; --accent:#3ddc84; --line:#2a2f38; } }
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2128; --muted:#6b7480; --accent:#1f9d55; --line:#e6e8ec; --chip:#eef0f3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f26; --text:#e8eaed; --muted:#8b949e; --accent:#3ddc84; --line:#2a2f38; --chip:#262b34; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
   main { max-width:720px; margin:0 auto; padding:20px 16px 48px; }
@@ -19,6 +19,15 @@
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   .card .label { font-size:13px; color:var(--muted); }
   .card .value { font-size:22px; font-weight:700; margin-top:2px; }
+  .filters { margin-bottom:16px; }
+  .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
+  .chip { border:1px solid var(--line); background:var(--chip); color:var(--text); border-radius:999px; padding:6px 14px; font-size:14px; cursor:pointer; }
+  .chip.active { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:8px; }
+  .row .sep { color:var(--muted); }
+  input, select { font:inherit; font-size:14px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; min-width:0; }
+  input[type=search] { flex:1; min-width:140px; }
+  .list { padding:0; overflow:hidden; }
   ul { list-style:none; margin:0; padding:0; }
   li { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); }
   li:last-child { border-bottom:0; }
@@ -27,6 +36,9 @@
   .who { font-weight:600; } .when { font-size:13px; color:var(--muted); }
   .amt { color:var(--accent); font-weight:700; font-size:18px; }
   .empty { padding:32px; text-align:center; color:var(--muted); }
+  .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:16px; font-size:14px; color:var(--muted); }
+  .pager button { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer; }
+  .pager button:disabled { opacity:.4; cursor:default; }
   #login { max-width:320px; margin:20vh auto; text-align:center; }
   #login input, #login button { width:100%; padding:12px; margin-top:10px; font-size:16px; border-radius:8px; border:1px solid var(--line); }
   #login button { background:var(--accent); color:#fff; border:0; font-weight:600; cursor:pointer; }
@@ -43,24 +55,74 @@
     <h1>실시간 입금 내역</h1>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 중…</span></div>
   </header>
+
   <div class="summary">
-    <div class="card"><div class="label">오늘 입금 합계</div><div class="value" id="todayTotal">0원</div></div>
-    <div class="card"><div class="label">오늘 입금 건수</div><div class="value" id="todayCount">0건</div></div>
+    <div class="card"><div class="label" id="sumLabel">입금 합계</div><div class="value" id="sumTotal">0원</div></div>
+    <div class="card"><div class="label">입금 건수</div><div class="value" id="sumCount">0건</div></div>
   </div>
-  <div class="card" style="padding:0"><ul id="list"></ul></div>
+
+  <div class="card filters">
+    <div class="chips" id="chips">
+      <button class="chip" data-range="today">오늘</button>
+      <button class="chip" data-range="yesterday">어제</button>
+      <button class="chip" data-range="thisWeek">이번주</button>
+      <button class="chip" data-range="lastWeek">저번주</button>
+      <button class="chip" data-range="all">전체</button>
+    </div>
+    <div class="row">
+      <input type="date" id="from" aria-label="시작일자">
+      <span class="sep">~</span>
+      <input type="date" id="to" aria-label="종료일자">
+      <select id="limit" aria-label="보기 개수">
+        <option value="10">10개씩</option>
+        <option value="20" selected>20개씩</option>
+        <option value="50">50개씩</option>
+        <option value="100">100개씩</option>
+      </select>
+    </div>
+    <div class="row">
+      <input type="search" id="q" placeholder="입금자 검색" aria-label="입금자 검색">
+    </div>
+  </div>
+
+  <div class="card list"><ul id="list"></ul></div>
+  <div class="pager">
+    <button id="prev">이전</button>
+    <span id="pageInfo">1 / 1</span>
+    <button id="next">다음</button>
+  </div>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
 const won = (n) => n.toLocaleString('ko-KR') + '원';
 let token = localStorage.getItem('viewToken') || '';
-let total = 0, count = 0, es;
+const state = { from: '', to: '', q: '', limit: 20, page: 1, range: 'today' };
+let es, highlightId = null, reqSeq = 0;
+
+// ---- 날짜 계산 (한국시간 기준 'YYYY-MM-DD') ----
+const DAY = 86400000;
+const kstNow = () => new Date(Date.now() + 9 * 3600000);
+const ymd = (d) => d.toISOString().slice(0, 10);
+const addDays = (s, n) => ymd(new Date(Date.parse(s + 'T00:00:00Z') + n * DAY));
+const weekStart = (s) => { const dow = new Date(s + 'T00:00:00Z').getUTCDay(); return addDays(s, -((dow + 6) % 7)); }; // 월요일 시작
+function rangeDates(name) {
+  const today = ymd(kstNow());
+  switch (name) {
+    case 'today': return [today, today];
+    case 'yesterday': { const y = addDays(today, -1); return [y, y]; }
+    case 'thisWeek': { const s = weekStart(today); return [s, addDays(s, 6)]; }
+    case 'lastWeek': { const s = addDays(weekStart(today), -7); return [s, addDays(s, 6)]; }
+    default: return ['', ''];
+  }
+}
+const RANGE_LABEL = { today: '오늘', yesterday: '어제', thisWeek: '이번주', lastWeek: '저번주', all: '전체' };
 
 function fmtTime(iso) {
-  return new Date(iso).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
-function renderRow(d, isNew) {
+function renderRow(d) {
   const li = document.createElement('li');
-  if (isNew) li.className = 'new';
+  if (d.id === highlightId) li.className = 'new';
   const left = document.createElement('div');
   const who = document.createElement('div'); who.className = 'who'; who.textContent = d.sender || '(입금자 미확인)';
   const when = document.createElement('div'); when.className = 'when'; when.textContent = fmtTime(d.received_at);
@@ -69,7 +131,6 @@ function renderRow(d, isNew) {
   li.append(left, amt);
   return li;
 }
-function updateSummary() { $('todayTotal').textContent = won(total); $('todayCount').textContent = count + '건'; }
 function beep() {
   try {
     const c = new (window.AudioContext || window.webkitAudioContext)();
@@ -78,34 +139,76 @@ function beep() {
     o.start(); o.stop(c.currentTime + 0.2);
   } catch {}
 }
+
+// ---- 조회 ----
+function syncControls() {
+  $('from').value = state.from; $('to').value = state.to;
+  $('limit').value = String(state.limit); $('q').value = state.q;
+  document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.range === state.range));
+}
+function sumLabel() {
+  const base = state.range ? RANGE_LABEL[state.range] : (state.from || state.to ? `${state.from || '처음'} ~ ${state.to || '현재'}` : '전체');
+  return base + (state.q ? ` · "${state.q}"` : '') + ' 입금 합계';
+}
 async function load() {
-  const r = await fetch('/api/deposits', { headers: { authorization: 'Bearer ' + token } });
+  const seq = ++reqSeq;
+  const p = new URLSearchParams({ limit: state.limit, page: state.page });
+  if (state.from) p.set('from', state.from);
+  if (state.to) p.set('to', state.to);
+  if (state.q) p.set('q', state.q);
+  const r = await fetch('/api/deposits?' + p, { headers: { authorization: 'Bearer ' + token } });
   if (r.status === 401) { localStorage.removeItem('viewToken'); return showLogin(); }
-  const { deposits, today } = await r.json();
+  if (!r.ok || seq !== reqSeq) return;
+  const data = await r.json();
   $('login').hidden = true; $('app').hidden = false;
-  total = today.total; count = today.count; updateSummary();
+  state.page = Math.min(data.page, data.pages);
+  $('sumLabel').textContent = sumLabel();
+  $('sumTotal').textContent = won(data.total);
+  $('sumCount').textContent = data.count + '건';
   const list = $('list'); list.replaceChildren();
-  if (!deposits.length) { list.innerHTML = '<div class="empty">아직 입금 내역이 없습니다</div>'; }
-  deposits.forEach((d) => list.append(renderRow(d, false)));
-  connect();
+  if (!data.deposits.length) list.innerHTML = '<div class="empty">조건에 맞는 입금 내역이 없습니다</div>';
+  data.deposits.forEach((d) => list.append(renderRow(d)));
+  $('pageInfo').textContent = `${data.page} / ${data.pages}`;
+  $('prev').disabled = data.page <= 1;
+  $('next').disabled = data.page >= data.pages;
+  highlightId = null;
+  syncControls();
+  if (!es) connect();
+}
+function setRange(name) {
+  const [f, t] = rangeDates(name);
+  Object.assign(state, { range: name, from: f, to: t, page: 1 });
+  load();
 }
 function connect() {
-  if (es) es.close();
   es = new EventSource('/events?token=' + encodeURIComponent(token));
   es.onopen = () => { $('dot').classList.add('on'); $('statusText').textContent = '실시간 연결됨'; };
   es.onerror = () => { $('dot').classList.remove('on'); $('statusText').textContent = '재연결 중…'; };
   es.addEventListener('deposit', (e) => {
-    const d = JSON.parse(e.data);
-    const list = $('list');
-    list.querySelector('.empty')?.remove();
-    list.prepend(renderRow(d, true));
-    total += d.amount; count += 1; updateSummary(); beep();
+    highlightId = JSON.parse(e.data).id;
+    beep();
+    // '오늘/이번주'처럼 이름 있는 기간은 날짜가 바뀌었을 수 있어 다시 계산한다.
+    if (state.range) { const [f, t] = rangeDates(state.range); state.from = f; state.to = t; }
+    state.page = 1;
+    load();
   });
 }
+
+// ---- 이벤트 ----
+document.querySelectorAll('.chip').forEach((c) => c.onclick = () => setRange(c.dataset.range));
+for (const id of ['from', 'to']) {
+  $(id).onchange = () => { state[id] = $(id).value; state.range = ''; state.page = 1; load(); };
+}
+$('limit').onchange = () => { state.limit = Number($('limit').value); state.page = 1; load(); };
+let qTimer;
+$('q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $('q').value.trim(); state.page = 1; load(); }, 300); };
+$('prev').onclick = () => { state.page -= 1; load(); };
+$('next').onclick = () => { state.page += 1; load(); };
+
 function showLogin() { $('app').hidden = true; $('login').hidden = false; }
-$('loginBtn').onclick = () => { token = $('tokenInput').value.trim(); localStorage.setItem('viewToken', token); load(); };
+$('loginBtn').onclick = () => { token = $('tokenInput').value.trim(); localStorage.setItem('viewToken', token); setRange('today'); };
 $('tokenInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
-token ? load() : showLogin();
+token ? setRange('today') : showLogin();
 </script>
 </body>
 </html>
