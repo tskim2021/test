@@ -142,6 +142,26 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
     }
 
+    // 푸시 테스트 링크: 브라우저로 열면 테스트 푸시를 보내고 결과 화면을 보여 준다.  /push-test?token=접속토큰
+    if (req.method === 'GET' && url.pathname === '/push-test') {
+      res.setHeader('cache-control', 'no-store');
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) {
+        res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
+        return res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px sans-serif;padding:24px"><h2>❌ 토큰이 올바르지 않습니다</h2><p>주소 끝의 <code>?token=</code> 뒤에 접속 토큰을 넣어 주세요.</p>');
+      }
+      broadcast('test', { at: new Date().toISOString() });
+      const n = clients.size;
+      const ok = n > 0;
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>푸시 테스트</title>
+<body style="font:18px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:24px;max-width:520px;margin:0 auto">
+<h2>${ok ? '✅ 테스트 푸시를 보냈습니다' : '⚠️ 연결된 수신기가 없습니다'}</h2>
+<p>서버에 연결된 수신기: <b>${n}개</b> (앱 + 열려 있는 웹 화면)</p>
+<p>${ok ? '폰에 <b>🔔 푸시 테스트</b> 알림이 와야 합니다. 오지 않으면 앱 설정 탭의 <b>푸시 연결</b> 상태와 알림 권한을 확인하세요.' : '앱이 서버에 연결돼 있지 않습니다. 앱 설정 탭에서 <b>푸시 연결: 실시간 연결됨</b>인지 확인하세요.'}</p>
+<p><a href="" style="display:inline-block;padding:10px 18px;border:1px solid #1f9d55;border-radius:10px;color:#1f9d55;text-decoration:none">다시 보내기</a></p>
+</body></html>`);
+    }
+
     // 푸시 테스트: 입금 기록을 만들지 않고, 연결된 앱/웹에 테스트 이벤트만 보낸다. listeners = 지금 연결된 수신기 수.
     if (req.method === 'POST' && url.pathname === '/api/push/test') {
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
