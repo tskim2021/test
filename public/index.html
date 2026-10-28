@@ -225,13 +225,15 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const closeModal = () => { $('modal').hidden = true; };
 $('modal').onclick = (e) => { if (e.target === $('modal')) closeModal(); };
 async function adminFetch(path, opts = {}) {
-  if (!adminToken) {
-    adminToken = (prompt('관리자 토큰을 입력하세요') || '').trim();
-    if (!adminToken) return null;
-    localStorage.setItem('adminToken', adminToken);
-  }
-  const r = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), authorization: 'Bearer ' + adminToken } });
+  const send = (t) => fetch(path, { ...opts, headers: { ...(opts.headers || {}), authorization: 'Bearer ' + t } });
+  // 로그인한 토큰이 관리자 권한도 가지면 그대로 처리한다. 아닐 때만 한 번 물어본다.
+  let r = await send(adminToken || token);
+  if (r.status !== 401) return r;
+  adminToken = (prompt('관리자 토큰을 입력하세요') || '').trim();
+  if (!adminToken) return null;
+  r = await send(adminToken);
   if (r.status === 401) { adminToken = ''; localStorage.removeItem('adminToken'); alert('관리자 토큰이 올바르지 않습니다'); return null; }
+  localStorage.setItem('adminToken', adminToken);
   return r;
 }
 async function openMatch(d) {
