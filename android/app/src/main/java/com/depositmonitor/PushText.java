@@ -32,8 +32,11 @@ final class PushText {
         String sender = p.isNull("sender") || p.optString("sender", "").isEmpty() ? "(입금자 미확인)" : p.optString("sender");
         String title = "✅ 처리 완료 · " + won(p.optLong("amount"));
         StringBuilder b = new StringBuilder(sender).append(" → 주문 ").append(p.optString("od_id"));
-        Object m = p.opt("manual"); // 이벤트는 true/false, 따라잡기 응답은 0/1
-        if (m instanceof Boolean ? (Boolean) m : m instanceof Number && ((Number) m).intValue() == 1) b.append(" (수동 처리)");
+        Object m = p.opt("manual"); // 이벤트는 true/false, 따라잡기 응답은 0/1/2(2 = 쇼핑몰에서 이미 처리된 주문과 연결)
+        int kind = m instanceof Boolean ? ((Boolean) m ? 1 : 0) : m instanceof Number ? ((Number) m).intValue() : 0;
+        if (p.optBoolean("linked", false)) kind = 2;
+        if (kind == 1) b.append(" (수동 처리)");
+        else if (kind == 2) b.append(" (기처리 주문 연결)");
         String memo = p.isNull("memo") ? "" : p.optString("memo", "");
         if (!memo.isEmpty()) b.append(" · ").append(memo);
         return new String[] { title, b.toString() };

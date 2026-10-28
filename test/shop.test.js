@@ -192,3 +192,20 @@ test('DB: 입금 처리 — 상태/처리 시각/장바구니/상점메모(관�
   assert.equal(Number(o.has_shop_memo), 1);
   await assert.rejects(() => shop.confirm('A2026102807', { note: 'x' }), /이미 처리된 주문/); // 두 번 처리 불가
 });
+
+test('DB(USD): 이미 처리된 주문은 입금액으로 환산해 비교, 연결 시 상점메모만 추가(상태 불변)', { skip }, async (t) => {
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'USD', SHOP_USD_KRW: '1329' });
+  after(() => shop.close());
+  const rel = await shop.relatedFor({ sender: '박입금', amount: 52500 });
+  assert.equal(rel.other.length, 1);
+  const o = rel.other[0];
+  assert.deepEqual([o.od_status, o.od_misu, o.od_receipt_price, o.od_receipt_krw], ['입금', 0, 39.5, 52500]); // 39.5 × 1329 = 52,495.5 → 52,500
+  assert.equal((await shop.matchLevels([{ id: 1, sender: '박입금', amount: 52500 }])).get(1), 'other');
+  const c0 = await shop.check(['A2026102813']);
+  if (!c0.has_shop_memo_column) return t.skip('테스트 DB에 od_shop_memo 컬럼 없음');
+  assert.equal(await shop.appendNote('A2026102813', '입금 박입금 52,500원 확인 → 이미 입금 상태인 주문과 연결(상태 변경 없음)'), true);
+  const c = await shop.check(['A2026102813']);
+  const after2 = c.processed_by_monitor[0];
+  assert.deepEqual([after2.od_status, after2.od_receipt_price, Number(after2.has_shop_memo)], ['입금', 39.5, 1]); // 상태/금액 그대로
+  assert.equal(await shop.appendNote('NO-SUCH', 'x'), false);
+});

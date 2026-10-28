@@ -211,6 +211,7 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
     od_misu: num(o.od_misu), od_receipt_price: num(o.od_receipt_price), od_total: orderTotal(o),
     od_send_cost: num(o.od_send_cost), od_time: o.od_time,
     od_misu_krw: rate ? krwOf(o.od_misu, rate) : null, od_total_krw: rate ? krwOf(orderTotal(o), rate) : null,
+    od_receipt_krw: rate ? krwOf(o.od_receipt_price, rate) : null, // 이미 입금 처리된 주문은 미수금이 0 이라 실제 입금액으로 비교한다
     od_send_cost_krw: rate ? Math.floor(num(o.od_send_cost) * rate) : null,
     items: items.filter((i) => String(i.od_id) === String(o.od_id)).map((i) => shapeItem(i, rate)),
   });
@@ -326,6 +327,15 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       } finally {
         conn.release();
       }
+    },
+
+    // 이미 처리된 주문에 상점메모(od_shop_memo)만 한 줄 덧붙인다. 주문 상태/금액은 건드리지 않는다. 컬럼이 없으면 false.
+    async appendNote(odId, note) {
+      if (!(await hasShopMemo()) || !note) return false;
+      const [r] = await pool.query(
+        `UPDATE ${O} SET od_shop_memo = CONCAT(IFNULL(od_shop_memo, ''), IF(IFNULL(od_shop_memo, '') = '', '', CHAR(10)), ?) WHERE od_id = ?`,
+        [`[입금모니터 ${kstNow()}] ${note}`, odId]);
+      return r.affectedRows > 0;
     },
 
     // 점검용(읽기 전용): 쇼핑몰이 쓰는 상태 값, 관리자가 직접 처리한 주문과 이 모니터가 처리한 주문의 값 비교

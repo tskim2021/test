@@ -127,17 +127,29 @@ const server = http.createServer(async (req, res) => {
       // datefield: paid=결제일자(입금 받은 날, 기본), order=주문일자(쇼핑몰 주문 시각), all=전체(둘 중 하나라도)
       const done = url.searchParams.get('done') === 'only' ? 'only' : 'hide'; // 처리 완료된 입금: 기본 숨김, done=only 면 그것만
       const field = ['all', 'order', 'paid'].includes(url.searchParams.get('datefield')) ? url.searchParams.get('datefield') : 'paid';
-      let rows, count, total;
+      let rows, count, total, stats;
       let matchError = null;
+      const sum = (list) => ({ count: list.length, total: list.reduce((a, r) => a + r.amount, 0), manual: list.filter((r) => r.order_manual === 1).length, linked: list.filter((r) => r.order_manual === 2).length });
       if (field !== 'paid' && shop && ADMIN_TOKEN && (from || to)) {
         try {
-          const all = await orderDateRows({ field, from, to, q, done });
-          count = all.length;
-          total = all.reduce((s2, r) => s2 + r.amount, 0);
-          rows = all.slice((page - 1) * limit, page * limit);
+          // 주문일자/전체 기준: 조건에 맞는 입금을 전부 모아 미처리/처리완료로 나눈다.
+          const all = await orderDateRows({ field, from, to, q, done: 'all' });
+          const pend = all.filter((r) => !r.order_id);
+          const dn = all.filter((r) => r.order_id);
+          const view = done === 'only' ? dn : pend;
+          count = view.length;
+          total = view.reduce((a, r) => a + r.amount, 0);
+          rows = view.slice((page - 1) * limit, page * limit);
+          stats = { pending: sum(pend), done: sum(dn) };
         } catch (e) { matchError = '주문일자 조회 실패: ' + e.message; console.error(matchError); }
       }
-      if (!rows) ({ rows, count, total } = db.search({ from, to, q, done, limit, offset: (page - 1) * limit }));
+      if (!rows) {
+        ({ rows, count, total } = db.search({ from, to, q, done, limit, offset: (page - 1) * limit }));
+        // 위쪽 합계 카드용: 표시(처리완료만 보기 여부)와 상관없이 같은 기간/검색 조건의 미처리·처리완료 현황
+        const p2 = db.search({ from, to, q, done: 'hide', limit: 0 });
+        const d2 = db.search({ from, to, q, done: 'only', limit: 0 });
+        stats = { pending: { count: p2.count, total: p2.total, manual: 0, linked: 0 }, done: { count: d2.count, total: d2.total, manual: d2.manual, linked: d2.linked } };
+      }
       let levels = new Map();
       if (shop && ADMIN_TOKEN) {
         try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = '주문 매칭 조회 실패: ' + e.message; console.error(matchError); }
@@ -147,7 +159,7 @@ const server = http.createServer(async (req, res) => {
         try { orderItems = await shop.itemsByOrder([...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))]); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
       }
       const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
-      return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
+      return json(res, 200, { deposits, count, total, stats, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
     }
 
     // 쇼핑몰 점검(관리자): 쇼핑몰이 쓰는 주문 상태 값, 관리자가 직접 처리한 주문 vs 이 모니터가 처리한 주문의 DB 값 비교
@@ -314,26 +326,35 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
       const related = await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
       const exact = related.full.some((o) => o.od_id === odId);
       const manual = !exact && [...related.name, ...related.amount].some((o) => o.od_id === odId);
-      if (!exact && !manual) return json(res, 409, { error: '이 입금과 관련된 미입금 주문이 아닙니다' });
-      if (manual) {
+      const linked = !exact && !manual && related.other.some((o) => o.od_id === odId); // 쇼핑몰에서 이미 처리된 주문(상태 변경 없이 연결만)
+      if (!exact && !manual && !linked) return json(res, 409, { error: '이 입금과 관련된 주문이 아닙니다' });
+      if (manual || linked) {
         const memo = typeof body.memo === 'string' ? body.memo.trim() : '';
-        if (!memo) return json(res, 400, { error: '이름·금액이 일치하지 않는 주문은 처리 사유(메모)를 입력해야 합니다' });
+        if (!memo) return json(res, 400, { error: linked ? '이미 처리된 주문과 연결하려면 처리 사유(메모)를 입력해야 합니다' : '이름·금액이 일치하지 않는 주문은 처리 사유(메모)를 입력해야 합니다' });
         if (memo.length > 500) return json(res, 400, { error: '메모는 500자 이내' });
         db.setMemo(deposit.id, memo);
       } else if (typeof body.memo === 'string' && body.memo.trim()) {
         db.setMemo(deposit.id, body.memo.trim().slice(0, 500));
       }
-      if (!db.claim(deposit.id, odId, manual)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
+      const kind = linked ? 2 : manual ? 1 : 0;
+      if (!db.claim(deposit.id, odId, kind)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
+      const memoNow = db.get(deposit.id).memo;
       try {
-        const memoNow = db.get(deposit.id).memo;
-        const note = `입금 ${deposit.sender || '(입금자 미확인)'} ${deposit.amount.toLocaleString('ko-KR')}원 확인 → ${shop.statusPaid} 처리${manual ? ' (수동)' : ''}${memoNow ? ': ' + memoNow : ''}`;
-        await shop.confirm(odId, { expectKrw: manual ? null : deposit.amount, note });
+        if (linked) {
+          // 주문 상태는 그대로 두고 상점메모에만 흔적을 남긴다(관리자 화면에서 확인용). 실패해도 연결 자체는 유지.
+          const st = related.other.find((o) => o.od_id === odId).od_status;
+          const note = `입금 ${deposit.sender || '(입금자 미확인)'} ${deposit.amount.toLocaleString('ko-KR')}원 확인 → 이미 '${st}' 상태인 주문과 연결(상태 변경 없음)${memoNow ? ': ' + memoNow : ''}`;
+          try { await shop.appendNote(odId, note); } catch (e) { console.error('상점메모 기록 실패:', e.message); }
+        } else {
+          const note = `입금 ${deposit.sender || '(입금자 미확인)'} ${deposit.amount.toLocaleString('ko-KR')}원 확인 → ${shop.statusPaid} 처리${manual ? ' (수동)' : ''}${memoNow ? ': ' + memoNow : ''}`;
+          await shop.confirm(odId, { expectKrw: manual ? null : deposit.amount, note });
+        }
       } catch (e) {
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
       }
-      broadcast('processed', { id: deposit.id, sender: deposit.sender, amount: deposit.amount, od_id: odId, manual, memo: db.get(deposit.id).memo, at: new Date().toISOString() });
-      return json(res, 200, { ok: true, od_id: odId, manual });
+      broadcast('processed', { id: deposit.id, sender: deposit.sender, amount: deposit.amount, od_id: odId, manual: kind === 1, linked: kind === 2, memo: memoNow, at: new Date().toISOString() });
+      return json(res, 200, { ok: true, od_id: odId, manual, linked });
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {

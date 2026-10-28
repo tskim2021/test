@@ -87,7 +87,8 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return n;
     },
     // 입금 1건을 주문 1건에 연결한다. 이미 연결됐거나 그 주문이 다른 입금과 연결돼 있으면 false.
-    claim: (depositId, odId, manual = false) => claimStmt.run(depositId, String(odId), new Date().toISOString(), manual ? 1 : 0).changes === 1,
+    // kind: 0=자동(이름·금액 일치 처리) 1=수동(사유 입력 처리) 2=기처리 연결(쇼핑몰에서 이미 처리된 주문과 연결). true/false 도 받는다(수동/자동).
+    claim: (depositId, odId, kind = 0) => claimStmt.run(depositId, String(odId), new Date().toISOString(), kind === true ? 1 : kind === false ? 0 : Number(kind)).changes === 1,
     setMemo: (id, memo) => memoStmt.run(String(memo), id).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
@@ -124,9 +125,9 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       if (to) { where.push('d.received_at <= ?'); args.push(kstEnd(to)); }
       if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       const w = `WHERE ${where.join(' AND ')}`;
-      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(d.amount),0) AS total FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w}`).get(...args);
+      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(d.amount),0) AS total, COALESCE(SUM(CASE WHEN m.manual = 1 THEN 1 ELSE 0 END),0) AS manual, COALESCE(SUM(CASE WHEN m.manual = 2 THEN 1 ELSE 0 END),0) AS linked FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w}`).get(...args);
       const rows = db.prepare(`${BASE} ${w} ORDER BY d.received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
-      return { rows, count: agg.count, total: agg.total };
+      return { rows, count: agg.count, total: agg.total, manual: agg.manual, linked: agg.linked };
     },
   };
 }

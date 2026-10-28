@@ -49,5 +49,7 @@ public class PushLogicTest {
         String[] auto = PushText.processed(new JSONObject("{\"id\":3,\"sender\":\"곽도빈\",\"amount\":26400,\"od_id\":\"A1\",\"manual\":0,\"memo\":\"\"}"));
         assertEquals("곽도빈 → 주문 A1", auto[1]);                       // 따라잡기 응답은 manual 이 0/1
         assertTrue(PushText.processed(new JSONObject("{\"id\":3,\"sender\":\"가\",\"amount\":1,\"od_id\":\"A1\",\"manual\":1,\"memo\":null}"))[1].contains("(수동 처리)"));
+        assertTrue(PushText.processed(new JSONObject("{\"id\":4,\"sender\":\"나\",\"amount\":1,\"od_id\":\"A2\",\"manual\":2,\"memo\":\"기처리\"}"))[1].contains("(기처리 주문 연결)")); // 따라잡기 응답
+        assertTrue(PushText.processed(new JSONObject("{\"id\":5,\"sender\":\"다\",\"amount\":1,\"od_id\":\"A3\",\"manual\":false,\"linked\":true,\"memo\":\"\"}"))[1].contains("(기처리 주문 연결)")); // 실시간 이벤트
     }
 }

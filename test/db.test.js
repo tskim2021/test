@@ -137,3 +137,21 @@ test('처리 완료 필터: 기본(hide)은 처리된 입금 제외, only 는 �
   assert.equal(db.candidates({ names: ['김미희'], ranges: [], odIds: [], done: 'hide' }).length, 0);
   assert.equal(db.candidates({ names: ['김미희'], ranges: [], odIds: [], done: 'only' }).length, 1);
 });
+
+test('search limit 0: 행 없이 건수/합계만(합계 카드용)', () => {
+  const db = mk();
+  const k = db.search({}).rows.find((r) => r.sender === '김미희');
+  db.claim(k.id, 'A1');
+  const p = db.search({ done: 'hide', limit: 0 });
+  const d = db.search({ done: 'only', limit: 0 });
+  assert.deepEqual([p.rows.length, p.count, p.total], [0, 2, 5000]);
+  assert.deepEqual([d.rows.length, d.count, d.total, d.manual], [0, 1, 1000, 0]); // 자동(일치) 처리 1건
+  const k2 = db.search({}).rows.find((r) => r.sender === '강애진');
+  db.claim(k2.id, 'A2', true); // 수동 처리
+  assert.deepEqual([db.search({ done: 'only', limit: 0 }).count, db.search({ done: 'only', limit: 0 }).manual], [2, 1]);
+  const k3 = db.search({}).rows.find((r) => r.sender === '100%_할인');
+  db.claim(k3.id, 'A3', 2); // 기처리 연결
+  const st = db.search({ done: 'only', limit: 0 });
+  assert.deepEqual([st.count, st.manual, st.linked], [3, 1, 1]);
+  assert.equal(db.search({ done: 'only' }).rows.find((r) => r.id === k3.id).order_manual, 2);
+});
