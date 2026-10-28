@@ -234,9 +234,10 @@ public class MainActivity extends Activity {
                     int code = c.getResponseCode();
                     if (code != 200) { store.log("푸시 테스트 실패: 서버 응답 " + code + (code == 401 ? " (토큰 확인)" : "")); return; }
                     java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
-                    int n = new org.json.JSONObject(r.readLine()).optInt("listeners", -1);
-                    store.log(n > 0 ? "푸시 테스트 전송됨 (서버에 연결된 수신기 " + n + "개) · 곧 알림이 와야 합니다"
-                                    : "서버에 연결된 수신기가 없습니다 · 이 폰의 푸시 연결이 끊겨 있어요(위 '푸시 연결' 참고)");
+                    org.json.JSONObject j = new org.json.JSONObject(r.readLine());
+                    int apps = j.optInt("apps", j.optInt("listeners", 0));
+                    store.log(apps > 0 ? "푸시 테스트 전송됨 (앱 푸시 연결 " + apps + "개) · 곧 알림이 와야 합니다. 로그에 '푸시 수신'이 뜨는지 보세요"
+                                       : "서버에 연결된 앱 푸시 연결이 없습니다 · 이 폰의 푸시 연결이 끊겨 있어요(위 '푸시 연결' 참고)");
                 } catch (Exception e) {
                     store.log("푸시 테스트 실패: " + e.getMessage());
                 }
@@ -297,6 +298,7 @@ public class MainActivity extends Activity {
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
                 + "\n푸시 연결: " + pushStateText()
+                + "\n마지막 푸시 수신: " + lastPushText()
                 + "\n알림 권한: " + (notifGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 3번에서 허용)")
                 + "\n전송 대기: " + store.queueSize() + "건" + warn);
         String log = store.logText();
@@ -311,6 +313,13 @@ public class MainActivity extends Activity {
         String s = store.pushState();
         if (sec < 0) return "아직 시작 전 (서버 주소/토큰 저장 후 시작됩니다)";
         return s + (sec >= 60 ? " · " + (sec / 60) + "분 전 기준" : "");
+    }
+
+    private String lastPushText() {
+        long at = store.lastPushAt();
+        if (at == 0) return "아직 없음";
+        long sec = (System.currentTimeMillis() - at) / 1000;
+        return sec < 60 ? "방금" : sec < 3600 ? (sec / 60) + "분 전" : (sec / 3600) + "시간 전";
     }
 
     private boolean isListenerEnabled() {

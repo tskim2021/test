@@ -30,6 +30,8 @@ final class Store {
     }
 
     // ---- 푸시 설정/진행 상태 ----
+    void setLastPush() { p.edit().putLong("last_push_at", System.currentTimeMillis()).apply(); }
+    long lastPushAt() { return p.getLong("last_push_at", 0); }
     void setPushState(String text) { p.edit().putString("push_state", text).putLong("push_state_at", System.currentTimeMillis()).apply(); }
     String pushState() { return p.getString("push_state", "서비스 꺼짐"); }
     long pushStateAt() { return p.getLong("push_state_at", 0); }

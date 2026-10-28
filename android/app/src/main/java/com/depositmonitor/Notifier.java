@@ -36,6 +36,13 @@ final class Notifier {
     }
 
     private static void post(Context c, String channel, int id, String[] text) {
+        NotificationManager nm = c.getSystemService(NotificationManager.class);
+        // 푸시는 받았는데 폰이 알림 표시를 막은 경우를 로그로 남긴다(권한 거부, 앱 알림 끔, 채널 끔).
+        NotificationChannel ch = nm.getNotificationChannel(channel);
+        if (!nm.areNotificationsEnabled() || (ch != null && ch.getImportance() == NotificationManager.IMPORTANCE_NONE)) {
+            new Store(c).log("⚠ 알림이 차단되어 표시하지 못했습니다 → 폰 설정 > 앱 > 입금 모니터 > 알림 허용 (설정 탭 '3)' 버튼)");
+            return;
+        }
         Notification n = new Notification.Builder(c, channel)
                 .setSmallIcon(android.R.drawable.stat_notify_chat)
                 .setContentTitle(text[0])
@@ -44,7 +51,7 @@ final class Notifier {
                 .setAutoCancel(true)
                 .setContentIntent(openApp(c))
                 .build();
-        c.getSystemService(NotificationManager.class).notify(id, n);
+        nm.notify(id, n);
     }
 
     static void needs(Context c, org.json.JSONObject d) { post(c, CH_NEEDS, (int) d.optLong("id"), PushText.needsProcessing(d)); }

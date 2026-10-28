@@ -141,7 +141,7 @@ public class PushService extends Service {
     }
 
     private void stream(Store store, String base, String token) throws Exception {
-        HttpURLConnection c = open(base + "/events?token=" + enc(token));
+        HttpURLConnection c = open(base + "/events?client=app&token=" + enc(token));
         c.setRequestProperty("Accept", "text/event-stream");
         conn = c;
         try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
@@ -160,6 +160,8 @@ public class PushService extends Service {
     private void handle(Store store, SseParser.Event e) {
         try {
             JSONObject d = new JSONObject(e.data);
+            store.setLastPush();
+            store.log("푸시 수신: " + e.name + (e.name.equals("test") ? "(" + d.optString("kind", "basic") + ")" : "") + (d.has("sender") && !d.isNull("sender") ? " " + d.optString("sender") : ""));
             if (e.name.equals("test")) {
                 Notifier.test(this, d);
             } else if (e.name.equals("deposit")) {
