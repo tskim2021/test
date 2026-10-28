@@ -5,6 +5,7 @@ import { openDb } from './db.js';
 import { parseNotification } from './parser.js';
 
 const PORT = Number(process.env.PORT || 3000);
+const HOST = process.env.HOST || '0.0.0.0';
 const API_TOKEN = process.env.API_TOKEN; // 폰 -> 서버 전송용
 const VIEW_TOKEN = process.env.VIEW_TOKEN || API_TOKEN; // 대시보드 열람용
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -109,4 +110,4 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => console.log(`입금 모니터 실행 중: http://localhost:${PORT}`));
+server.listen(PORT, HOST, () => console.log(`입금 모니터 실행 중: http://${HOST}:${PORT}`));
