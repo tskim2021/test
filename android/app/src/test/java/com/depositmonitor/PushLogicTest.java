@@ -42,12 +42,18 @@ public class PushLogicTest {
         assertTrue(PushText.needsProcessing(new JSONObject("{\"sender\":null,\"amount\":1}"))[1].startsWith("(입금자 미확인)"));
     }
 
+    @Test public void processed_autoAndMatchedKinds() throws Exception {
+        assertEquals("가 → 주문 A9 (자동 처리)", PushText.processed(new JSONObject("{\"id\":1,\"sender\":\"가\",\"amount\":1,\"od_id\":\"A9\",\"kind\":0,\"manual\":false,\"auto\":true,\"memo\":\"\"}"))[1]);
+        assertEquals("가 → 주문 A9", PushText.processed(new JSONObject("{\"id\":1,\"sender\":\"가\",\"amount\":1,\"od_id\":\"A9\",\"kind\":3,\"manual\":false,\"memo\":\"\"}"))[1]); // 관리자 일치처리
+        assertEquals("가 → 주문 A9 (수동 처리)", PushText.processed(new JSONObject("{\"id\":1,\"sender\":\"가\",\"amount\":1,\"od_id\":\"A9\",\"kind\":1,\"manual\":true,\"memo\":\"\"}"))[1]);
+    }
+
     @Test public void processed_text() throws Exception {
         String[] t = PushText.processed(new JSONObject("{\"id\":2,\"sender\":\"이전희\",\"amount\":825400,\"od_id\":\"A2026\",\"manual\":true,\"memo\":\"환율 차이\"}"));
         assertEquals("✅ 처리 완료 · 825,400원", t[0]);
         assertEquals("이전희 → 주문 A2026 (수동 처리) · 환율 차이", t[1]);
         String[] auto = PushText.processed(new JSONObject("{\"id\":3,\"sender\":\"곽도빈\",\"amount\":26400,\"od_id\":\"A1\",\"manual\":0,\"memo\":\"\"}"));
-        assertEquals("곽도빈 → 주문 A1", auto[1]);                       // 따라잡기 응답은 manual 이 0/1
+        assertEquals("곽도빈 → 주문 A1 (자동 처리)", auto[1]);                // 따라잡기 응답은 manual 에 0(자동)/1/2/3
         assertTrue(PushText.processed(new JSONObject("{\"id\":3,\"sender\":\"가\",\"amount\":1,\"od_id\":\"A1\",\"manual\":1,\"memo\":null}"))[1].contains("(수동 처리)"));
         assertTrue(PushText.processed(new JSONObject("{\"id\":4,\"sender\":\"나\",\"amount\":1,\"od_id\":\"A2\",\"manual\":2,\"memo\":\"기처리\"}"))[1].contains("(기처리 주문 연결)")); // 따라잡기 응답
         assertTrue(PushText.processed(new JSONObject("{\"id\":5,\"sender\":\"다\",\"amount\":1,\"od_id\":\"A3\",\"manual\":false,\"linked\":true,\"memo\":\"\"}"))[1].contains("(기처리 주문 연결)")); // 실시간 이벤트

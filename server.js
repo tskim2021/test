@@ -21,6 +21,11 @@ if (!API_TOKEN) {
 
 const db = openDb();
 const shop = await createShop();
+
+// 자동 처리: 입금자명·금액이 쇼핑몰의 미입금 주문 '한 건'과 정확히 같으면 사람이 누르지 않아도 입금 처리한다. AUTO_PROCESS=0 으로 끈다.
+const AUTO_PROCESS = process.env.AUTO_PROCESS !== '0';
+// 이 기능을 켜기 전에 이미 들어와 있던 입금은 자동 처리하지 않는다(AUTO_PROCESS_BACKFILL=1 이면 포함).
+if (!db.getMeta('auto_since')) db.setMeta('auto_since', process.env.AUTO_PROCESS_BACKFILL === '1' ? '1970-01-01T00:00:00.000Z' : new Date().toISOString());
 shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건`)).catch((e) => console.error('쇼핑몰 DB 연결 실패:', e.message));
 // 주문일자/전체 검색: 쇼핑몰 주문 시각이 기간에 드는 주문과 관계(이름·금액·연결)가 있는 입금을 모은다.
 // field='all' 이면 입금 시각이 기간에 드는 입금도 합친다.
@@ -37,6 +42,38 @@ async function orderDateRows({ field, from, to, q, done }) {
   }
   return rows.sort((a, b) => b.received_at.localeCompare(a.received_at) || b.id - a.id);
 }
+// 반환: 자동 처리한 주문번호, 아니면 null(후보가 없거나 여러 건이거나 금액이 정확히 같지 않으면 사람이 확인)
+async function autoProcess(row) {
+  if (!AUTO_PROCESS || !shop || !ADMIN_TOKEN) return null;
+  const related = await shop.relatedFor({ sender: row.sender, amount: row.amount });
+  if (related.full.length !== 1) return null;
+  const o = related.full[0];
+  if ((o.od_misu_krw ?? o.od_misu) !== row.amount) return null; // 허용 오차(±100원) 안이어도 자동은 정확히 같을 때만
+  if (!db.claim(row.id, o.od_id, 0)) return null;
+  const note = `입금 ${row.sender || '(입금자 미확인)'} ${row.amount.toLocaleString('ko-KR')}원 확인 → ${shop.statusPaid} 처리 (자동)`;
+  try {
+    await shop.confirm(o.od_id, { expectKrw: row.amount, note });
+  } catch (e) {
+    db.release(row.id);
+    console.error(`자동 처리 실패(입금 #${row.id} → 주문 ${o.od_id}):`, e.message);
+    return null;
+  }
+  console.log(`자동 처리: 입금 #${row.id} ${row.sender} ${row.amount}원 → 주문 ${o.od_id}`);
+  broadcast('processed', { id: row.id, sender: row.sender, amount: row.amount, od_id: o.od_id, kind: 0, manual: false, linked: false, auto: true, memo: '', at: new Date().toISOString() });
+  return o.od_id;
+}
+
+// 놓친 입금(주문이 입금보다 늦게 들어온 경우, 쇼핑몰 DB 일시 장애 등)을 주기적으로 다시 확인한다.
+let sweeping = false;
+async function sweepAuto() {
+  if (sweeping || !AUTO_PROCESS || !shop || !ADMIN_TOKEN) return;
+  sweeping = true;
+  try {
+    for (const r of db.unprocessedSince(db.getMeta('auto_since'), 100)) await autoProcess(r);
+  } catch (e) { console.error('자동 처리 점검 실패:', e.message); } finally { sweeping = false; }
+}
+if (AUTO_PROCESS && shop) setInterval(sweepAuto, Number(process.env.AUTO_SWEEP_MS || 60_000)).unref();
+
 const isAdmin = (req, url) => !!ADMIN_TOKEN && safeEq(tokenOf(req, url), ADMIN_TOKEN);
 const clients = new Map(); // res -> { app: 앱(PushService)의 연결이면 true, 웹 화면이면 false }
 const clientCounts = () => { let app = 0, web = 0; for (const v of clients.values()) v.app ? app++ : web++; return { app, web }; };
@@ -105,9 +142,12 @@ const server = http.createServer(async (req, res) => {
       if (!parsed) return json(res, 200, { ok: true, ignored: true });
       const row = db.add(parsed);
       if (!row) return json(res, 200, { ok: true, duplicate: true });
-      broadcast('deposit', { ...row, match_level: await levelOf(row), shop: !!shop && !!ADMIN_TOKEN });
+      let autoOd = null;
+      try { autoOd = await autoProcess(row); } catch (e) { console.error('자동 처리 오류:', e.message); }
+      // 자동 처리됐으면 '처리 필요'가 아니라 '처리 완료'만 알린다(autoProcess 안에서 발송).
+      if (!autoOd) broadcast('deposit', { ...row, match_level: await levelOf(row), shop: !!shop && !!ADMIN_TOKEN });
       notifyTelegram(row);
-      return json(res, 200, { ok: true, id: row.id });
+      return json(res, 200, { ok: true, id: row.id, auto_processed: autoOd });
     }
 
     // 앱의 '연결 테스트'용. 토큰만 확인하고 아무것도 저장하지 않는다.
@@ -147,7 +187,7 @@ const server = http.createServer(async (req, res) => {
       const field = ['all', 'order', 'paid'].includes(url.searchParams.get('datefield')) ? url.searchParams.get('datefield') : 'paid';
       let rows, count, total, stats;
       let matchError = null;
-      const sum = (list) => ({ count: list.length, total: list.reduce((a, r) => a + r.amount, 0), manual: list.filter((r) => r.order_manual === 1).length, linked: list.filter((r) => r.order_manual === 2).length });
+      const sum = (list) => ({ count: list.length, total: list.reduce((a, r) => a + r.amount, 0), auto: list.filter((r) => r.order_id && r.order_manual === 0).length, manual: list.filter((r) => r.order_manual === 1).length, linked: list.filter((r) => r.order_manual === 2).length, matched: list.filter((r) => r.order_manual === 3).length });
       if (field !== 'paid' && shop && ADMIN_TOKEN && (from || to)) {
         try {
           // 주문일자/전체 기준: 조건에 맞는 입금을 전부 모아 미처리/처리완료로 나눈다.
@@ -166,7 +206,7 @@ const server = http.createServer(async (req, res) => {
         // 위쪽 합계 카드용: 표시(처리완료만 보기 여부)와 상관없이 같은 기간/검색 조건의 미처리·처리완료 현황
         const p2 = db.search({ from, to, q, done: 'hide', limit: 0 });
         const d2 = db.search({ from, to, q, done: 'only', limit: 0 });
-        stats = { pending: { count: p2.count, total: p2.total, manual: 0, linked: 0 }, done: { count: d2.count, total: d2.total, manual: d2.manual, linked: d2.linked } };
+        stats = { pending: { count: p2.count, total: p2.total, auto: 0, manual: 0, linked: 0, matched: 0 }, done: { count: d2.count, total: d2.total, auto: d2.auto, manual: d2.manual, linked: d2.linked, matched: d2.matched } };
       }
       let levels = new Map();
       if (shop && ADMIN_TOKEN) {
@@ -199,7 +239,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>쇼핑몰 점검</title>
 <style>body{font:15px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:16px;max-width:1000px;margin:0 auto}table{border-collapse:collapse;margin:6px 0 18px}th,td{border:1px solid #ddd;padding:5px 9px;text-align:left;font-size:13px}th{background:#f3f4f6}</style>
 <h2>쇼핑몰 점검 (읽기 전용)</h2>
-<p>이 모니터가 입금 처리 시 쓰는 상태: <b>${esc(data.status_paid_setting)}</b> · 상점메모(od_shop_memo) 컬럼: <b>${data.has_shop_memo_column ? '있음 (처리 흔적을 남김)' : '없음'}</b></p>
+<p>자동 처리(이름·금액 정확히 일치 + 주문 1건): <b>${AUTO_PROCESS ? '켜짐' : '꺼짐'}</b>${AUTO_PROCESS ? ` (${esc(db.getMeta('auto_since'))} 이후 입금부터)` : ''}<br>이 모니터가 입금 처리 시 쓰는 상태: <b>${esc(data.status_paid_setting)}</b> · 상점메모(od_shop_memo) 컬럼: <b>${data.has_shop_memo_column ? '있음 (처리 흔적을 남김)' : '없음'}</b></p>
 <h3>주문 상태(od_status)별 건수</h3>${tbl(data.order_statuses, ['s', 'n'])}
 <h3>장바구니 상태(ct_status)별 건수</h3>${tbl(data.cart_statuses, ['s', 'n'])}
 <h3>쇼핑몰 관리자가 직접 처리한 최근 주문</h3>${tbl(data.processed_by_shop_admin, oc)}
@@ -358,7 +398,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
       } else if (typeof body.memo === 'string' && body.memo.trim()) {
         db.setMemo(deposit.id, body.memo.trim().slice(0, 500));
       }
-      const kind = linked ? 2 : manual ? 1 : 0;
+      const kind = linked ? 2 : manual ? 1 : 3; // 3 = 일치처리(관리자가 일치 건을 확인하고 처리)
       if (!db.claim(deposit.id, odId, kind)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
       const memoNow = db.get(deposit.id).memo;
       try {
@@ -375,7 +415,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
       }
-      broadcast('processed', { id: deposit.id, sender: deposit.sender, amount: deposit.amount, od_id: odId, manual: kind === 1, linked: kind === 2, memo: memoNow, at: new Date().toISOString() });
+      broadcast('processed', { id: deposit.id, sender: deposit.sender, amount: deposit.amount, od_id: odId, kind, manual: kind === 1, linked: kind === 2, memo: memoNow, at: new Date().toISOString() });
       return json(res, 200, { ok: true, od_id: odId, manual, linked });
     }
 

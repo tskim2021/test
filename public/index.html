@@ -153,11 +153,12 @@
   .btn.warn { border-color:#b36b00; color:#b36b00; }
   .btn.warn.primary { background:#b36b00; color:#fff; border-color:#b36b00; }
   .badge.auto { background:color-mix(in srgb, var(--accent) 22%, transparent); color:var(--accent); font-weight:700; }
+  .badge.matched { background:color-mix(in srgb, #0d9488 22%, transparent); color:#0f766e; font-weight:700; }
   .badge.linked { background:color-mix(in srgb, #2563eb 20%, transparent); color:#1d4ed8; font-weight:700; }
   .btn.info { border-color:#2563eb; color:#2563eb; }
   .btn.info.primary { background:#2563eb; color:#fff; }
   .badge.manual { background:color-mix(in srgb, #d97706 24%, transparent); color:#b45309; font-weight:700; }
-  @media (prefers-color-scheme: dark) { .badge.manual { color:#fbbf24; } .badge.linked { color:#93c5fd; } }
+  @media (prefers-color-scheme: dark) { .badge.manual { color:#fbbf24; } .badge.linked { color:#93c5fd; } .badge.matched { color:#5eead4; } }
   .badge { font-size:12px; color:var(--muted); background:var(--chip); border-radius:999px; padding:3px 10px; white-space:nowrap; }
   /* 오른쪽에서 밀려 나오는 상세 패널 */
   #modal { position:fixed; inset:0; background:rgba(0,0,0,.35); z-index:10; opacity:0; pointer-events:none; transition:opacity .2s; }
@@ -273,7 +274,8 @@
     <span><i style="background:color-mix(in srgb,#e6a100 55%,transparent)"></i>이름만 일치</span>
     <span><i style="background:color-mix(in srgb,#2d7ff9 50%,transparent)"></i>금액만 일치</span>
     <span><i style="background:color-mix(in srgb,#8b949e 55%,transparent)"></i>다른 상태 주문</span>
-    <span><i style="background:color-mix(in srgb,var(--accent) 80%,transparent)"></i>자동처리(이름·금액 일치)</span>
+    <span><i style="background:color-mix(in srgb,var(--accent) 80%,transparent)"></i>자동처리(시스템)</span>
+    <span><i style="background:color-mix(in srgb,#0d9488 80%,transparent)"></i>일치처리(관리자 확인)</span>
     <span><i style="background:color-mix(in srgb,#d97706 80%,transparent)"></i>수동처리(사유 입력)</span>
     <span><i style="background:color-mix(in srgb,#2563eb 80%,transparent)"></i>기처리 연결(이미 처리된 주문)</span>
   </div>
@@ -374,9 +376,9 @@ function memoParts(d) {
 const md = (iso) => { const t = new Date(Date.parse(iso) + 9 * 3600000).toISOString(); return t.slice(5, 10).replace('-', '.') + ' ' + t.slice(11, 19); };
 const mdShop = (s) => (s ? s.slice(5, 10).replace('-', '.') + ' ' + s.slice(11, 19) : '');
 const usdFmt = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 3 });
-const KIND_NAME = ['auto', 'manual', 'linked'];
-const KIND_TEXT = { auto: '자동처리', manual: '수동처리', linked: '기처리' };
-const KIND_TITLE = { auto: '이름·금액이 일치해 바로 처리', manual: '이름·금액이 일치하지 않아 사유를 적고 수동으로 처리', linked: '쇼핑몰에서 이미 처리된 주문과 연결(주문 상태 변경 없음)' };
+const KIND_NAME = ['auto', 'manual', 'linked', 'matched'];
+const KIND_TEXT = { auto: '자동처리', manual: '수동처리', linked: '기처리', matched: '일치처리' };
+const KIND_TITLE = { auto: '입금자·금액이 정확히 일치해 시스템이 자동으로 처리', matched: '이름·금액이 일치해 관리자가 확인 후 처리', manual: '이름·금액이 일치하지 않아 사유를 적고 수동으로 처리', linked: '쇼핑몰에서 이미 처리된 주문과 연결(주문 상태 변경 없음)' };
 const optionsOf = (i) => (i.options && i.options.length ? i.options : i.option ? [i.option] : []);
 
 function dateSpan(label, value) {
@@ -656,7 +658,7 @@ async function load() {
   $('sumAllCount').textContent = (st.pending.count + st.done.count) + '건';
   $('sumPendingCount').textContent = shopEnabled ? `미처리 ${st.pending.count}건` : '';
   $('sumDoneCount').textContent = st.done.count + '건';
-  $('sumDoneSplit').textContent = st.done.count ? `자동 ${st.done.count - (st.done.manual || 0) - (st.done.linked || 0)} · 수동 ${st.done.manual || 0} · 기처리 ${st.done.linked || 0}` : '';
+  $('sumDoneSplit').textContent = st.done.count ? `자동 ${st.done.auto || 0} · 일치 ${st.done.matched || 0} · 수동 ${st.done.manual || 0} · 기처리 ${st.done.linked || 0}` : '';
   $('cardDoneTotal').hidden = $('cardDoneCount').hidden = !shopEnabled; // 처리(주문 연결)는 쇼핑몰 연동 시에만 있다
   const list = $('list'); list.replaceChildren();
   if (!data.deposits.length) list.innerHTML = '<div class="empty">조건에 맞는 입금 내역이 없습니다</div>';

@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb, isDate, kstStart, kstEnd } from '../db.js';
+import { DatabaseSync } from 'node:sqlite';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const mk = () => {
   const db = openDb(':memory:');
@@ -154,4 +158,43 @@ test('search limit 0: 행 없이 건수/합계만(합계 카드용)', () => {
   const st = db.search({ done: 'only', limit: 0 });
   assert.deepEqual([st.count, st.manual, st.linked], [3, 1, 1]);
   assert.equal(db.search({ done: 'only' }).rows.find((r) => r.id === k3.id).order_manual, 2);
+});
+
+test('처리 종류 집계: 자동(0)/수동(1)/기처리(2)/일치처리(3)', () => {
+  const db = openDb(':memory:');
+  const add = (n, kind) => { const r = db.add({ amount: 1000 * n, sender: `고객${n}`, balance: null, raw: `r${n}` }, new Date(`2026-10-28T0${n}:00:00Z`)); if (kind !== undefined) db.claim(r.id, `A${n}`, kind); };
+  add(1, 0); add(2, 0); add(3, 1); add(4, 2); add(5, 3); add(6);
+  const d = db.search({ done: 'only', limit: 0 });
+  assert.deepEqual([d.count, d.auto, d.manual, d.linked, d.matched], [5, 2, 1, 1, 1]);
+  const p = db.search({ done: 'hide', limit: 0 });
+  assert.deepEqual([p.count, p.auto], [1, 0]); // 미처리는 처리 종류 없음
+});
+
+test('자동 처리 도입 전의 처리 기록(0)은 한 번만 일치처리(3)로 이전', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dep-'));
+  const path = join(dir, 'old.db');
+  const first = openDb(path);
+  const r = first.add({ amount: 5000, sender: '구건', balance: null, raw: 'old' }, new Date('2026-10-01T00:00:00Z'));
+  first.claim(r.id, 'AOLD', 0); // 예전 버전에서 관리자가 버튼으로 처리한 기록(0)
+  const raw = new DatabaseSync(path);
+  raw.exec('PRAGMA user_version = 0'); // 이전 버전 DB 상태 재현
+  raw.close();
+  const second = openDb(path);
+  assert.equal(second.search({ done: 'only' }).rows[0].order_manual, 3);
+  const r2 = second.add({ amount: 6000, sender: '신건', balance: null, raw: 'new' }, new Date('2026-10-02T00:00:00Z'));
+  second.claim(r2.id, 'ANEW', 0); // 새 버전의 자동 처리(0)
+  const third = openDb(path); // 다시 열어도 이전하지 않는다
+  assert.deepEqual(third.search({ done: 'only' }).rows.map((x) => [x.sender, x.order_manual]).sort(), [['구건', 3], ['신건', 0]]);
+});
+
+test('메타 값 저장과 자동 처리 대상(기준 시각 이후, 미처리만)', () => {
+  const db = openDb(':memory:');
+  assert.equal(db.getMeta('auto_since'), null);
+  db.setMeta('auto_since', '2026-10-28T00:00:00.000Z'); db.setMeta('auto_since', '2026-10-28T05:00:00.000Z');
+  assert.equal(db.getMeta('auto_since'), '2026-10-28T05:00:00.000Z');
+  const a = db.add({ amount: 1, sender: '이전', balance: null, raw: 'a' }, new Date('2026-10-28T04:59:00Z'));
+  const b = db.add({ amount: 2, sender: '이후', balance: null, raw: 'b' }, new Date('2026-10-28T05:01:00Z'));
+  const c = db.add({ amount: 3, sender: '이후처리', balance: null, raw: 'c' }, new Date('2026-10-28T05:02:00Z'));
+  db.claim(c.id, 'A1', 0);
+  assert.deepEqual(db.unprocessedSince(db.getMeta('auto_since')).map((r) => r.sender), ['이후']);
 });

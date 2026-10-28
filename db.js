@@ -57,6 +57,15 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     )
   `);
   const pushLogIns = db.prepare('INSERT INTO push_log (at, event, deposit_id, label, apps, webs) VALUES (?,?,?,?,?,?)');
+  // 처리 종류(matches.manual): 0=자동(시스템이 이름·금액 일치로 자동 처리) 1=수동(사유 입력) 2=기처리 연결 3=일치처리(관리자가 일치 건을 확인 후 처리)
+  // 자동 처리 기능이 생기기 전의 0 은 모두 관리자가 버튼으로 처리한 것이므로 한 번만 3 으로 옮긴다.
+  if (db.prepare('PRAGMA user_version').get().user_version < 1) {
+    db.exec('UPDATE matches SET manual = 3 WHERE manual = 0');
+    db.exec('PRAGMA user_version = 1');
+  }
+  db.exec('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)');
+  const metaGet = db.prepare('SELECT v FROM meta WHERE k = ?');
+  const metaSet = db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v');
   const memoStmt = db.prepare('UPDATE deposits SET memo = ? WHERE id = ?');
   const byId = db.prepare('SELECT * FROM deposits WHERE dedupe_key = ?');
   const getOne = db.prepare('SELECT * FROM deposits WHERE id = ?');
@@ -73,6 +82,10 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return r.changes ? byId.get(key) : null;
     },
     get: (id) => getOne.get(id),
+    getMeta: (k) => metaGet.get(k)?.v ?? null,
+    setMeta: (k, v) => metaSet.run(k, String(v)),
+    // 자동 처리 대상: 기준 시각 이후에 들어왔고 아직 처리되지 않은(숨김 제외) 입금, 오래된 것부터
+    unprocessedSince: (iso, limit = 100) => db.prepare(`${BASE} WHERE d.hidden = 0 AND m.od_id IS NULL AND d.received_at >= ? ORDER BY d.id ASC LIMIT ?`).all(iso, limit),
     logPush: ({ event, depositId = null, label = '', apps, webs }, at = new Date()) => pushLogIns.run(at.toISOString(), event, depositId, label, apps, webs),
     pushLog: (limit = 100) => db.prepare('SELECT * FROM push_log ORDER BY id DESC LIMIT ?').all(limit),
     // 앱 푸시 따라잡기용
@@ -87,7 +100,7 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return n;
     },
     // 입금 1건을 주문 1건에 연결한다. 이미 연결됐거나 그 주문이 다른 입금과 연결돼 있으면 false.
-    // kind: 0=자동(이름·금액 일치 처리) 1=수동(사유 입력 처리) 2=기처리 연결(쇼핑몰에서 이미 처리된 주문과 연결). true/false 도 받는다(수동/자동).
+    // kind: 0=자동 1=수동 2=기처리 연결 3=일치처리(관리자 확인). true/false 도 받는다(수동/자동).
     claim: (depositId, odId, kind = 0) => claimStmt.run(depositId, String(odId), new Date().toISOString(), kind === true ? 1 : kind === false ? 0 : Number(kind)).changes === 1,
     setMemo: (id, memo) => memoStmt.run(String(memo), id).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
@@ -125,9 +138,9 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       if (to) { where.push('d.received_at <= ?'); args.push(kstEnd(to)); }
       if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       const w = `WHERE ${where.join(' AND ')}`;
-      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(d.amount),0) AS total, COALESCE(SUM(CASE WHEN m.manual = 1 THEN 1 ELSE 0 END),0) AS manual, COALESCE(SUM(CASE WHEN m.manual = 2 THEN 1 ELSE 0 END),0) AS linked FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w}`).get(...args);
+      const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(d.amount),0) AS total, COALESCE(SUM(CASE WHEN m.od_id IS NOT NULL AND m.manual = 0 THEN 1 ELSE 0 END),0) AS auto, COALESCE(SUM(CASE WHEN m.manual = 1 THEN 1 ELSE 0 END),0) AS manual, COALESCE(SUM(CASE WHEN m.manual = 2 THEN 1 ELSE 0 END),0) AS linked, COALESCE(SUM(CASE WHEN m.manual = 3 THEN 1 ELSE 0 END),0) AS matched FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w}`).get(...args);
       const rows = db.prepare(`${BASE} ${w} ORDER BY d.received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
-      return { rows, count: agg.count, total: agg.total, manual: agg.manual, linked: agg.linked };
+      return { rows, count: agg.count, total: agg.total, auto: agg.auto, manual: agg.manual, linked: agg.linked, matched: agg.matched };
     },
   };
 }
