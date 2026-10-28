@@ -75,6 +75,7 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         if (configured()) showList(false); else showSettings();
+        askNotificationPermission();
     }
 
     @Override
@@ -227,6 +228,9 @@ public class MainActivity extends Activity {
         root.addView(button("2) 배터리 최적화 설정 열기 (제외 권장)", v ->
             startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))));
 
+        root.addView(button("3) 알림 권한 설정 열기 (푸시가 안 올 때)", v ->
+            startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()))));
+
         root.addView(text("최근 로그 (길게 눌러 복사 가능)", 13, false));
         logView = new TextView(this);
         logView.setTextSize(12);
@@ -239,13 +243,23 @@ public class MainActivity extends Activity {
         return sv;
     }
 
+    private boolean notifGranted() {
+        return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean askedThisLaunch;
+
+    /** Android 13 이상: 앱을 처음 열면 알림 권한 창을 띄운다(설치할 때가 아니라 실행할 때 묻는 것이 안드로이드 방식). */
+    private void askNotificationPermission() {
+        if (notifGranted() || askedThisLaunch) return;
+        askedThisLaunch = true;
+        requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+    }
+
     /** 설정돼 있고 켜져 있으면 푸시 서비스를 실행(알림 권한이 없으면 먼저 요청). */
     private void ensurePush() {
         if (!store.pushEnabled() || !configured()) return;
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
-            return;
-        }
+        if (!notifGranted()) { askNotificationPermission(); return; }
         try { PushService.start(this); } catch (Exception e) { store.log("푸시 시작 실패: " + e.getMessage()); }
     }
 
@@ -253,7 +267,7 @@ public class MainActivity extends Activity {
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) ensurePush();
-        else store.log("알림 권한이 거부되어 푸시를 받을 수 없습니다 (폰 설정 > 앱 > 알림에서 허용)");
+        else store.log("알림 권한이 거부되어 푸시를 받을 수 없습니다. 설정 탭의 '3) 알림 권한 설정 열기'에서 허용하세요");
     }
 
     private void refresh() {
@@ -263,6 +277,7 @@ public class MainActivity extends Activity {
         String warn = url.startsWith("http://") ? "\n⚠ http:// 는 토큰이 암호화되지 않습니다. 가능하면 https 사용" : "";
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
+                + "\n알림 권한: " + (notifGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 3번에서 허용)")
                 + "\n전송 대기: " + store.queueSize() + "건" + warn);
         String log = store.logText();
         logView.setText(log.isEmpty() ? "아직 로그가 없습니다." : log);
