@@ -75,6 +75,12 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, id: row.id });
     }
 
+    // 앱의 '연결 테스트'용. 토큰만 확인하고 아무것도 저장하지 않는다.
+    if (req.method === 'GET' && url.pathname === '/api/ping') {
+      if (!safeEq(tokenOf(req, url), API_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      return json(res, 200, { ok: true });
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/deposits') {
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
       return json(res, 200, { deposits: db.recent(200), today: db.today() });

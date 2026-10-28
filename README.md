@@ -24,7 +24,20 @@ API_TOKEN=$(openssl rand -hex 24) npm start     # 토큰은 따로 적어 둘 �
 브라우저에서 `http://서버주소:3000` 접속 후 토큰을 입력합니다.
 **외부 공개 시 반드시 HTTPS(예: Caddy, Cloudflare Tunnel) 뒤에 두세요.**
 
-## 폰 설정 (MacroDroid 기준, Tasker도 동일 개념)
+## 폰 설정 A: 전용 앱 (권장)
+
+`apk/deposit-monitor.apk` 를 폰에 설치합니다(출처를 알 수 없는 앱 설치 허용 필요, 디버그 서명 APK).
+소스는 `android/` 에 있고 `cd android && gradle assembleDebug` 로 직접 빌드할 수 있습니다(JDK 17+, Android SDK 34).
+
+1. 앱 실행 → 서버 주소와 `API_TOKEN` 입력 → **저장 후 연결 테스트** ("연결 성공 ✅" 확인)
+2. **1) 알림 접근 허용 설정 열기** → "입금 모니터" 켜기
+3. **2) 배터리 최적화 설정 열기** → 입금 모니터를 "제한 없음/최적화 안 함"으로
+4. 카카오뱅크 앱의 입금 알림이 켜져 있어야 합니다.
+
+앱은 카카오뱅크(`com.kakaobank.channel`) 알림만 읽어 서버로 보냅니다. 서버에 연결이 안 되면 대기열에 쌓아 두었다가
+30초마다 재전송합니다. 화면 하단 로그에 수신한 알림 원문이 남으므로, 서버가 인식하지 못하면 그 문구로 `parser.js` 를 맞추세요.
+
+## 폰 설정 B: MacroDroid (앱 없이)
 
 1. MacroDroid 설치 후 "알림 접근 허용" 켜기, 배터리 최적화에서 MacroDroid 제외
 2. 매크로 만들기

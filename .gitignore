@@ -2,3 +2,7 @@ node_modules/
 *.db
 *.db-*
 .env
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
