@@ -31,6 +31,8 @@ final class Notifier {
                 .setContentTitle("입금 모니터")
                 .setContentText(text)
                 .setOngoing(true)
+                .setShowWhen(true)
+                .setWhen(System.currentTimeMillis())
                 .setContentIntent(openApp(c))
                 .build();
     }

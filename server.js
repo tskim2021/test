@@ -63,6 +63,12 @@ const readBody = (req) =>
 function broadcast(event, payload) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const c of clients.keys()) c.write(msg);
+  // 보낼 때 폰 앱이 연결돼 있었는지 기록한다(나중에 "푸시가 갔나?"를 확인하기 위해). 연결이 없었다면 앱은 재연결 때 따라잡는다.
+  try {
+    const { app, web } = clientCounts();
+    const who = payload.sender ? `${payload.sender} ${Number(payload.amount || 0).toLocaleString('ko-KR')}원` : '';
+    db.logPush({ event: payload.kind && payload.kind !== 'basic' ? `${event}(${payload.kind})` : event, depositId: payload.id ?? null, label: who, apps: app, webs: web });
+  } catch (e) { console.error('푸시 기록 실패:', e.message); }
 }
 
 // 새 입금이 '처리 필요'인지 알리기 위한 일치 수준(쇼핑몰 미연동이면 null)
@@ -141,6 +147,27 @@ const server = http.createServer(async (req, res) => {
       }
       const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
+    }
+
+    // 푸시 발송 기록 조회: /push-log?token=접속토큰  (&format=json 도 가능)
+    if (req.method === 'GET' && url.pathname === '/push-log') {
+      res.setHeader('cache-control', 'no-store');
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) { res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('unauthorized'); }
+      const rows = db.pushLog(200);
+      if (url.searchParams.get('format') === 'json') return json(res, 200, { push_log: rows });
+      const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const kst = (iso) => new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+      const names = { deposit: '💰 새 입금(처리 필요)', processed: '✅ 처리 완료', test: '🔔 테스트' };
+      const kindOf = (e) => (names[e.replace(/\(.*\)/, '')] || e) + (e.includes('(') ? ' ' + e.match(/\((.*)\)/)[1] : '');
+      const { app, web } = clientCounts();
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>푸시 발송 기록</title>
+<style>body{font:15px/1.5 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:16px;max-width:860px;margin:0 auto}table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #ddd;padding:7px 6px;text-align:left;vertical-align:top}th{font-size:13px;color:#666}.ok{color:#1f9d55;font-weight:700}.bad{color:#c0392b;font-weight:700}small{color:#666}</style>
+<h2>푸시 발송 기록</h2>
+<p>지금 연결: 폰 앱 <b>${app}개</b> · 웹 화면 <b>${web}개</b><br><small>앱이 연결돼 있을 때 보낸 푸시는 실시간으로 전달됩니다. 앱 연결이 0개였다면 그 푸시는 바로 가지 못하고, 앱이 다시 연결될 때 따라잡아 알려 줍니다(처리 필요 5건 초과 시 요약 1건).</small></p>
+<table><tr><th>시각</th><th>종류</th><th>내용</th><th>보낼 때 앱 연결</th><th>웹</th><th>판정</th></tr>
+${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td><td>${esc(r.label)}</td><td>${r.apps}개</td><td>${r.webs}개</td><td class="${r.apps > 0 ? 'ok' : 'bad'}">${r.apps > 0 ? '앱으로 전송됨' : '앱 미연결 → 재연결 시 전달'}</td></tr>`).join('') || '<tr><td colspan="6">아직 기록이 없습니다 (이 기능을 반영한 이후의 푸시부터 기록됩니다)</td></tr>'}
+</table></html>`);
     }
 
     // 푸시 테스트 링크: 브라우저로 열면 테스트 푸시를 보내고 결과 화면을 보여 준다.
@@ -287,6 +314,8 @@ const server = http.createServer(async (req, res) => {
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       res.write(': connected\n\n');
+      req.socket.setKeepAlive(true, 15_000); // 중간에서 죽은 연결을 빨리 알아채도록
+      req.socket.setNoDelay(true);
       clients.set(res, { app: url.searchParams.get('client') === 'app' });
       const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
       req.on('close', () => { clearInterval(ping); clients.delete(res); });

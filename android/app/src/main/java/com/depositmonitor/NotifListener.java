@@ -26,6 +26,15 @@ public class NotifListener extends NotificationListenerService {
     }
 
     @Override
+    public void onListenerConnected() {
+        // 알림 접근이 켜져 있으면 시스템이 이 서비스를 계속 살려 두고 다시 붙여 주므로, 이때 푸시 연결도 함께 되살린다.
+        Store s = new Store(this);
+        if (s.pushEnabled() && !s.serverUrl().isEmpty() && !s.token().isEmpty()) {
+            try { PushService.start(this); } catch (Exception ignored) { }
+        }
+    }
+
+    @Override
     public void onListenerDisconnected() {
         // 시스템이 연결을 끊었을 때 다시 붙는다.
         requestRebind(new ComponentName(this, NotifListener.class));

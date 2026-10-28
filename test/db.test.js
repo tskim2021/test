@@ -109,3 +109,13 @@ test('푸시 따라잡기: 마지막 id 이후 입금, 처리 시각 이후 처�
   assert.equal(db.processedSince(procs[0].at).length, 0); // 같은 시각 이후만
   assert.ok(db.after(0).find((r) => r.id === k.id).order_id === 'A77'); // 처리된 입금은 order_id 가 있어 서버가 알림에서 제외
 });
+
+test('푸시 발송 기록', () => {
+  const db = mk();
+  db.logPush({ event: 'deposit', depositId: 5, label: '박지은 35,900원', apps: 0, webs: 2 }, new Date('2026-10-28T09:31:00Z'));
+  db.logPush({ event: 'processed', depositId: 5, label: '박지은 35,900원', apps: 1, webs: 2 }, new Date('2026-10-28T09:40:00Z'));
+  const log = db.pushLog();
+  assert.deepEqual(log.map((r) => [r.event, r.apps, r.webs]), [['processed', 1, 2], ['deposit', 0, 2]]); // 최신순
+  assert.equal(log[1].label, '박지은 35,900원');
+  assert.equal(db.pushLog(1).length, 1);
+});

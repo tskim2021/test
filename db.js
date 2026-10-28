@@ -41,6 +41,19 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
   if (!db.prepare('PRAGMA table_info(matches)').all().some((c) => c.name === 'manual')) {
     db.exec('ALTER TABLE matches ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
   }
+  // 푸시 발송 기록: 보낸 시점에 앱(푸시 서비스)/웹 화면이 몇 개 연결돼 있었는지 남긴다.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS push_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      at TEXT NOT NULL,
+      event TEXT NOT NULL,
+      deposit_id INTEGER,
+      label TEXT NOT NULL DEFAULT '',
+      apps INTEGER NOT NULL,
+      webs INTEGER NOT NULL
+    )
+  `);
+  const pushLogIns = db.prepare('INSERT INTO push_log (at, event, deposit_id, label, apps, webs) VALUES (?,?,?,?,?,?)');
   const memoStmt = db.prepare('UPDATE deposits SET memo = ? WHERE id = ?');
   const byId = db.prepare('SELECT * FROM deposits WHERE dedupe_key = ?');
   const getOne = db.prepare('SELECT * FROM deposits WHERE id = ?');
@@ -57,6 +70,8 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return r.changes ? byId.get(key) : null;
     },
     get: (id) => getOne.get(id),
+    logPush: ({ event, depositId = null, label = '', apps, webs }, at = new Date()) => pushLogIns.run(at.toISOString(), event, depositId, label, apps, webs),
+    pushLog: (limit = 100) => db.prepare('SELECT * FROM push_log ORDER BY id DESC LIMIT ?').all(limit),
     // 앱 푸시 따라잡기용
     maxId: () => db.prepare('SELECT COALESCE(MAX(id), 0) AS n FROM deposits').get().n,
     after: (id, limit = 50) => db.prepare(`${BASE} WHERE d.id > ? AND d.hidden = 0 ORDER BY d.id ASC LIMIT ?`).all(id, limit),

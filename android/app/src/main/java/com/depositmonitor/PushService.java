@@ -5,7 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.os.Build;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.os.IBinder;
+import android.os.PowerManager;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import java.io.BufferedReader;
@@ -25,6 +28,9 @@ public class PushService extends Service {
     private volatile boolean running;
     private volatile HttpURLConnection conn;
     private Thread worker;
+    private final Object lock = new Object();
+    private PowerManager.WakeLock wakeLock;
+    private ConnectivityManager.NetworkCallback netCallback;
 
     public static void start(Context c) { c.startForegroundService(new Intent(c, PushService.class)); }
     public static void stop(Context c) { c.stopService(new Intent(c, PushService.class)); }
@@ -39,6 +45,20 @@ public class PushService extends Service {
         } else {
             startForeground(FG_ID, Notifier.status(this, "연결 중…"));
         }
+        // 화면이 꺼져도 연결을 유지하려고 CPU 를 깨워 둔다(배터리 최적화 제외와 함께 써야 효과가 있다).
+        if (wakeLock == null) {
+            wakeLock = getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "depositmonitor:push");
+            wakeLock.setReferenceCounted(false);
+            wakeLock.acquire();
+        }
+        // 네트워크가 바뀌거나(와이파이↔LTE) 끊겼다 돌아오면 죽은 연결을 끊고 즉시 다시 연결한다.
+        if (netCallback == null) {
+            netCallback = new ConnectivityManager.NetworkCallback() {
+                @Override public void onAvailable(Network n) { dropConnection(); wakeLoop(); }
+                @Override public void onLost(Network n) { dropConnection(); }
+            };
+            try { getSystemService(ConnectivityManager.class).registerDefaultNetworkCallback(netCallback); } catch (Exception ignored) { netCallback = null; }
+        }
         if (worker == null || !worker.isAlive()) {
             running = true;
             worker = new Thread(this::loop, "push");
@@ -51,10 +71,27 @@ public class PushService extends Service {
     public void onDestroy() {
         new Store(this).setPushState("서비스 꺼짐");
         running = false;
+        if (netCallback != null) { try { getSystemService(ConnectivityManager.class).unregisterNetworkCallback(netCallback); } catch (Exception ignored) { } netCallback = null; }
+        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        wakeLock = null;
         HttpURLConnection c = conn;
         if (c != null) c.disconnect();
         if (worker != null) worker.interrupt();
         super.onDestroy();
+    }
+
+    private void dropConnection() {
+        HttpURLConnection c = conn;
+        if (c != null) c.disconnect();
+    }
+
+    private void wakeLoop() {
+        synchronized (lock) { lock.notifyAll(); }
+    }
+
+    /** 일정 시간 쉬되, 네트워크가 돌아오면 바로 깨어난다. */
+    private void pause(long ms) throws InterruptedException {
+        synchronized (lock) { lock.wait(ms); }
     }
 
     private void status(String text) {
@@ -70,11 +107,11 @@ public class PushService extends Service {
             try {
                 if (base.isEmpty() || token.isEmpty()) {
                     status("서버 주소/토큰을 설정하세요");
-                    Thread.sleep(10_000);
+                    pause(10_000);
                     continue;
                 }
                 catchUp(store, base, token);
-                status("실시간 연결됨");
+                status("실시간 연결됨 · " + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(new java.util.Date()) + " 연결");
                 backoff = 2000;
                 stream(store, base, token);
                 if (running) status("연결이 끊겼어요 · 재연결 중…");
@@ -83,7 +120,7 @@ public class PushService extends Service {
             } catch (Exception e) {
                 if (running) status("연결 실패 · 재연결 중…");
             }
-            try { Thread.sleep(backoff); } catch (InterruptedException e) { return; }
+            try { pause(backoff); } catch (InterruptedException e) { return; }
             backoff = Math.min(backoff * 2, 30_000);
         }
     }
@@ -147,9 +184,17 @@ public class PushService extends Service {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
             SseParser parser = new SseParser();
             String line;
+            long lastBeat = 0;
             while (running && (line = r.readLine()) != null) {
                 SseParser.Event e = parser.feed(line);
                 if (e != null) handle(store, e);
+                // 서버가 25초마다 보내는 ping 으로 연결이 살아 있음을 확인하고, 알림에 '마지막 확인 시각'을 남긴다.
+                // 폰이 앱을 얼려 버리면 이 시각이 멈추므로 "연결됨" 문구가 거짓인지 바로 알 수 있다.
+                long now = System.currentTimeMillis();
+                if (now - lastBeat > 60_000) {
+                    lastBeat = now;
+                    status("실시간 연결됨 · 마지막 확인 " + new java.text.SimpleDateFormat("HH:mm", java.util.Locale.KOREA).format(new java.util.Date(now)));
+                }
             }
         } finally {
             c.disconnect();

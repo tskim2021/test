@@ -13,6 +13,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.text.InputType;
 import android.view.View;
@@ -245,8 +246,7 @@ public class MainActivity extends Activity {
         }));
         root.addView(button("1) 알림 접근 허용 설정 열기 (카카오뱅크 알림 읽기)", v ->
             startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));
-        root.addView(button("2) 배터리 최적화 설정 열기 (제외 권장)", v ->
-            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))));
+        root.addView(button("2) 배터리 최적화 제외 요청 (푸시 유지에 필수)", v -> askBatteryExemption()));
 
         root.addView(button("3) 알림 권한 설정 열기 (푸시가 안 올 때)", v ->
             startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()))));
@@ -267,11 +267,26 @@ public class MainActivity extends Activity {
         return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private boolean askedThisLaunch;
+    private boolean askedThisLaunch, askedBatteryThisLaunch;
+
+    private boolean batteryOk() {
+        return getSystemService(PowerManager.class).isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    /** 배터리 최적화 제외 팝업("항상 백그라운드에서 실행 허용")을 바로 띄운다. 이게 꺼져 있으면 폰이 화면을 끄면 푸시 연결을 끊는다. */
+    private void askBatteryExemption() {
+        if (batteryOk()) return;
+        try {
+            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+        }
+    }
 
     /** Android 13 이상: 앱을 처음 열면 알림 권한 창을 띄운다(설치할 때가 아니라 실행할 때 묻는 것이 안드로이드 방식). */
     private void askNotificationPermission() {
-        if (notifGranted() || askedThisLaunch) return;
+        if (notifGranted()) { if (!askedBatteryThisLaunch) { askedBatteryThisLaunch = true; askBatteryExemption(); } return; }
+        if (askedThisLaunch) return;
         askedThisLaunch = true;
         requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
     }
@@ -286,6 +301,7 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+        if (!askedBatteryThisLaunch) { askedBatteryThisLaunch = true; askBatteryExemption(); } // 알림 권한 다음으로 배터리 제외를 묻는다
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) ensurePush();
         else store.log("알림 권한이 거부되어 푸시를 받을 수 없습니다. 설정 탭의 '3) 알림 권한 설정 열기'에서 허용하세요");
     }
@@ -299,6 +315,7 @@ public class MainActivity extends Activity {
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
                 + "\n푸시 연결: " + pushStateText()
                 + "\n마지막 푸시 수신: " + lastPushText()
+                + "\n배터리 최적화: " + (batteryOk() ? "제외됨 ✅" : "적용 중 ❌ (화면을 끄면 푸시가 끊깁니다 → 아래 2번)")
                 + "\n알림 권한: " + (notifGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 3번에서 허용)")
                 + "\n전송 대기: " + store.queueSize() + "건" + warn);
         String log = store.logText();
