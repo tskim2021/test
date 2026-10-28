@@ -1,0 +1,11 @@
+{
+  "name": "deposit-monitor",
+  "version": "1.0.0",
+  "description": "입금 알림을 받아 실시간으로 보여주는 대시보드",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": { "node": ">=22.13" }
+}

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>실시간 입금 내역</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2128; --muted:#6b7480; --accent:#1f9d55; --line:#e6e8ec; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f26; --text:#e8eaed; --muted:#8b949e; --accent:#3ddc84; --line:#2a2f38; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
+  main { max-width:720px; margin:0 auto; padding:20px 16px 48px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  h1 { font-size:20px; margin:0; }
+  .status { font-size:13px; color:var(--muted); }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#c0392b; margin-right:6px; }
+  .dot.on { background:var(--accent); }
+  .summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+  .card .label { font-size:13px; color:var(--muted); }
+  .card .value { font-size:22px; font-weight:700; margin-top:2px; }
+  ul { list-style:none; margin:0; padding:0; }
+  li { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); }
+  li:last-child { border-bottom:0; }
+  li.new { animation:flash 2.5s ease-out; }
+  @keyframes flash { from { background:color-mix(in srgb, var(--accent) 25%, transparent); } to { background:transparent; } }
+  .who { font-weight:600; } .when { font-size:13px; color:var(--muted); }
+  .amt { color:var(--accent); font-weight:700; font-size:18px; }
+  .empty { padding:32px; text-align:center; color:var(--muted); }
+  #login { max-width:320px; margin:20vh auto; text-align:center; }
+  #login input, #login button { width:100%; padding:12px; margin-top:10px; font-size:16px; border-radius:8px; border:1px solid var(--line); }
+  #login button { background:var(--accent); color:#fff; border:0; font-weight:600; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="login" hidden>
+  <h1>입금 모니터</h1>
+  <input id="tokenInput" type="password" placeholder="접속 토큰" autocomplete="current-password">
+  <button id="loginBtn">접속</button>
+</div>
+<main id="app" hidden>
+  <header>
+    <h1>실시간 입금 내역</h1>
+    <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 중…</span></div>
+  </header>
+  <div class="summary">
+    <div class="card"><div class="label">오늘 입금 합계</div><div class="value" id="todayTotal">0원</div></div>
+    <div class="card"><div class="label">오늘 입금 건수</div><div class="value" id="todayCount">0건</div></div>
+  </div>
+  <div class="card" style="padding:0"><ul id="list"></ul></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const won = (n) => n.toLocaleString('ko-KR') + '원';
+let token = localStorage.getItem('viewToken') || '';
+let total = 0, count = 0, es;
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleString('ko-KR', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+}
+function renderRow(d, isNew) {
+  const li = document.createElement('li');
+  if (isNew) li.className = 'new';
+  const left = document.createElement('div');
+  const who = document.createElement('div'); who.className = 'who'; who.textContent = d.sender || '(입금자 미확인)';
+  const when = document.createElement('div'); when.className = 'when'; when.textContent = fmtTime(d.received_at);
+  left.append(who, when);
+  const amt = document.createElement('div'); amt.className = 'amt'; amt.textContent = '+' + won(d.amount);
+  li.append(left, amt);
+  return li;
+}
+function updateSummary() { $('todayTotal').textContent = won(total); $('todayCount').textContent = count + '건'; }
+function beep() {
+  try {
+    const c = new (window.AudioContext || window.webkitAudioContext)();
+    const o = c.createOscillator(), g = c.createGain();
+    o.connect(g); g.connect(c.destination); o.frequency.value = 880; g.gain.value = 0.1;
+    o.start(); o.stop(c.currentTime + 0.2);
+  } catch {}
+}
+async function load() {
+  const r = await fetch('/api/deposits', { headers: { authorization: 'Bearer ' + token } });
+  if (r.status === 401) { localStorage.removeItem('viewToken'); return showLogin(); }
+  const { deposits, today } = await r.json();
+  $('login').hidden = true; $('app').hidden = false;
+  total = today.total; count = today.count; updateSummary();
+  const list = $('list'); list.replaceChildren();
+  if (!deposits.length) { list.innerHTML = '<div class="empty">아직 입금 내역이 없습니다</div>'; }
+  deposits.forEach((d) => list.append(renderRow(d, false)));
+  connect();
+}
+function connect() {
+  if (es) es.close();
+  es = new EventSource('/events?token=' + encodeURIComponent(token));
+  es.onopen = () => { $('dot').classList.add('on'); $('statusText').textContent = '실시간 연결됨'; };
+  es.onerror = () => { $('dot').classList.remove('on'); $('statusText').textContent = '재연결 중…'; };
+  es.addEventListener('deposit', (e) => {
+    const d = JSON.parse(e.data);
+    const list = $('list');
+    list.querySelector('.empty')?.remove();
+    list.prepend(renderRow(d, true));
+    total += d.amount; count += 1; updateSummary(); beep();
+  });
+}
+function showLogin() { $('app').hidden = true; $('login').hidden = false; }
+$('loginBtn').onclick = () => { token = $('tokenInput').value.trim(); localStorage.setItem('viewToken', token); load(); };
+$('tokenInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+token ? load() : showLogin();
+</script>
+</body>
+</html>
