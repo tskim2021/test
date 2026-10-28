@@ -57,3 +57,18 @@ test('소프트 삭제: 목록/합계에서 빠지지만 DB에는 남고 중복 
   assert.ok(db.get(before.rows[0].id)); // 행은 남아 있음
   assert.equal(db.add({ amount: 3000, sender: '100%_할인', balance: null, raw: 'c' }, new Date('2026-10-28T06:00:00Z')), null); // 같은 알림 재전송은 무시
 });
+
+test('메모 저장과 수동 처리 표시', () => {
+  const db = mk();
+  const r = db.search({}).rows[0];
+  assert.equal(r.memo, '');
+  assert.ok(db.setMemo(r.id, '이름 오기, 전화 확인 후 처리'));
+  assert.ok(!db.setMemo(9999, 'x'));
+  assert.equal(db.get(r.id).memo, '이름 오기, 전화 확인 후 처리');
+  assert.ok(db.claim(r.id, 'A123', true));
+  assert.ok(!db.claim(r.id, 'A124', false)); // 한 입금은 한 주문에만
+  const again = db.search({}).rows.find((x) => x.id === r.id);
+  assert.equal(again.order_id, 'A123');
+  assert.equal(again.order_manual, 1);
+  assert.equal(again.memo, '이름 오기, 전화 확인 후 처리');
+});

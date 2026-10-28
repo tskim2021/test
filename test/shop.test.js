@@ -51,7 +51,22 @@ test('DB: 입금별 일치 수준과 관련 주문', { skip }, async () => {
 test('처리된 주문 번호별 상품·옵션 조회', { skip }, async () => {
   const shop = await createShop();
   after(() => shop.close());
-  const m = await shop.itemsByOrder(['2026102801']);
-  assert.deepEqual(m['2026102801'].map((i) => [i.name, i.option, i.qty]), [['선물세트 A', '', 2], ['쿠키 박스', '색상 빨강', 2]]);
+  const m = await shop.itemsByOrder(['A2026102801']);
+  assert.deepEqual(m['A2026102801'].map((i) => [i.name, i.option, i.qty]), [['선물세트 A', '', 2], ['쿠키 박스', '색상 빨강', 2]]);
   assert.deepEqual(await shop.itemsByOrder([]), {});
+});
+
+test('DB: 문자 포함 주문번호, DECIMAL 금액은 숫자로, 시각은 DB 값 그대로', { skip }, async () => {
+  const shop = await createShop();
+  after(() => shop.close());
+  const rel = await shop.relatedFor({ sender: '강애진', amount: 5000 });
+  const o = rel.name[0];
+  assert.match(o.od_id, /^A\d+$/);
+  assert.equal(typeof o.od_misu, 'number');
+  assert.match(o.od_time, /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/); // 시간대 변환 없이 문자열 그대로
+  for (const i of o.items) {
+    assert.equal(typeof i.price, 'number');
+    assert.equal(i.subtotal, i.price * i.qty);
+  }
+  assert.equal(o.items[0].subtotal, 80000);
 });

@@ -25,6 +25,9 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
   if (!db.prepare('PRAGMA table_info(deposits)').all().some((c) => c.name === 'hidden')) {
     db.exec('ALTER TABLE deposits ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0');
   }
+  if (!db.prepare('PRAGMA table_info(deposits)').all().some((c) => c.name === 'memo')) {
+    db.exec("ALTER TABLE deposits ADD COLUMN memo TEXT NOT NULL DEFAULT ''");
+  }
   const hideStmt = db.prepare('UPDATE deposits SET hidden = 1 WHERE id = ? AND hidden = 0');
   db.exec(`
     CREATE TABLE IF NOT EXISTS matches (
@@ -33,9 +36,13 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       confirmed_at TEXT NOT NULL
     )
   `);
+  if (!db.prepare('PRAGMA table_info(matches)').all().some((c) => c.name === 'manual')) {
+    db.exec('ALTER TABLE matches ADD COLUMN manual INTEGER NOT NULL DEFAULT 0');
+  }
+  const memoStmt = db.prepare('UPDATE deposits SET memo = ? WHERE id = ?');
   const byId = db.prepare('SELECT * FROM deposits WHERE dedupe_key = ?');
   const getOne = db.prepare('SELECT * FROM deposits WHERE id = ?');
-  const claimStmt = db.prepare('INSERT OR IGNORE INTO matches (deposit_id, od_id, confirmed_at) VALUES (?,?,?)');
+  const claimStmt = db.prepare('INSERT OR IGNORE INTO matches (deposit_id, od_id, confirmed_at, manual) VALUES (?,?,?,?)');
   const releaseStmt = db.prepare('DELETE FROM matches WHERE deposit_id = ?');
   const matchOf = db.prepare('SELECT od_id FROM matches WHERE deposit_id = ?');
 
@@ -54,7 +61,8 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return n;
     },
     // 입금 1건을 주문 1건에 연결한다. 이미 연결됐거나 그 주문이 다른 입금과 연결돼 있으면 false.
-    claim: (depositId, odId) => claimStmt.run(depositId, String(odId), new Date().toISOString()).changes === 1,
+    claim: (depositId, odId, manual = false) => claimStmt.run(depositId, String(odId), new Date().toISOString(), manual ? 1 : 0).changes === 1,
+    setMemo: (id, memo) => memoStmt.run(String(memo), id).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
     // from/to: 'YYYY-MM-DD'(한국시간 기준, 양 끝 포함), q: 입금자 부분일치. 조건에 맞는 건수/합계도 함께 돌려준다.
@@ -66,7 +74,7 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       if (q) { where.push("sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
       const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount),0) AS total FROM deposits ${w}`).get(...args);
-      const rows = db.prepare(`SELECT d.*, m.od_id AS order_id FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w} ORDER BY received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
+      const rows = db.prepare(`SELECT d.*, m.od_id AS order_id, m.manual AS order_manual FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w} ORDER BY received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
       return { rows, count: agg.count, total: agg.total };
     },
   };

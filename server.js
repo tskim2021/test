@@ -98,15 +98,16 @@ const server = http.createServer(async (req, res) => {
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
       const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
       let levels = new Map();
+      let matchError = null;
       if (shop && ADMIN_TOKEN) {
-        try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { console.error('주문 매칭 조회 실패:', e.message); }
+        try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = e.message; console.error('주문 매칭 조회 실패:', e.message); }
       }
       let orderItems = {};
       if (shop && ADMIN_TOKEN) {
         try { orderItems = await shop.itemsByOrder([...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))]); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
       }
       const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
-      return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN });
+      return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
     }
 
     // 선택 삭제: DB에서 지우지 않고 목록에서만 숨긴다(hidden=1) — 관리자 전용
@@ -126,30 +127,50 @@ const server = http.createServer(async (req, res) => {
       const deposit = db.get(Number(m[1]));
       if (!deposit) return json(res, 404, { error: 'not found' });
       const confirmed = db.matchedOrder(deposit.id);
-      const candidates = confirmed ? [] : await shop.candidatesFor({ sender: deposit.sender, amount: deposit.amount });
-      const related = confirmed ? { name: [], amount: [], other: [] } : await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
-      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at }, confirmed_order: confirmed, candidates, related: { name: related.name, amount: related.amount, other: related.other } });
+      const related = confirmed ? { full: [], name: [], amount: [], other: [] } : await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
+      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at, memo: deposit.memo }, confirmed_order: confirmed, candidates: related.full, related: { name: related.name, amount: related.amount, other: related.other } });
     }
 
-    // 관리자 '주문완료' — 후보 목록에 있는 주문만 입금 처리한다
+    // 메모(처리 사유 등) 저장 — 관리자 전용
+    if (req.method === 'POST' && (m = url.pathname.match(/^\/api\/deposits\/(\d+)\/memo$/))) {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      let memo;
+      try { memo = JSON.parse(await readBody(req)).memo; } catch { memo = null; }
+      if (typeof memo !== 'string' || memo.length > 500) return json(res, 400, { error: '메모는 500자 이내 문자열' });
+      if (!db.setMemo(Number(m[1]), memo.trim())) return json(res, 404, { error: 'not found' });
+      return json(res, 200, { ok: true, memo: memo.trim() });
+    }
+
+    // 관리자 '주문완료'. 이름·금액이 모두 일치하면 바로, 일치하지 않는 주문(이름만/금액만)은 메모(사유)를 적어야 수동 처리된다.
     if (req.method === 'POST' && (m = url.pathname.match(/^\/api\/deposits\/(\d+)\/confirm$/))) {
       if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
       if (!shop) return json(res, 503, { error: '쇼핑몰 DB가 설정되지 않았습니다' });
       const deposit = db.get(Number(m[1]));
       if (!deposit) return json(res, 404, { error: 'not found' });
-      let odId;
-      try { odId = String(JSON.parse(await readBody(req)).od_id || ''); } catch { odId = ''; }
-      if (!/^\d+$/.test(odId)) return json(res, 400, { error: 'od_id 필요' });
-      const candidates = await shop.candidatesFor({ sender: deposit.sender, amount: deposit.amount });
-      if (!candidates.some((c) => c.od_id === odId)) return json(res, 409, { error: '입금자명·금액이 일치하는 미입금 주문이 아닙니다' });
-      if (!db.claim(deposit.id, odId)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
+      let body;
+      try { body = JSON.parse(await readBody(req)); } catch { body = {}; }
+      const odId = String(body.od_id || '');
+      if (!/^[A-Za-z0-9_-]{1,40}$/.test(odId)) return json(res, 400, { error: 'od_id 필요' });
+      const related = await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
+      const exact = related.full.some((o) => o.od_id === odId);
+      const manual = !exact && [...related.name, ...related.amount].some((o) => o.od_id === odId);
+      if (!exact && !manual) return json(res, 409, { error: '이 입금과 관련된 미입금 주문이 아닙니다' });
+      if (manual) {
+        const memo = typeof body.memo === 'string' ? body.memo.trim() : '';
+        if (!memo) return json(res, 400, { error: '이름·금액이 일치하지 않는 주문은 처리 사유(메모)를 입력해야 합니다' });
+        if (memo.length > 500) return json(res, 400, { error: '메모는 500자 이내' });
+        db.setMemo(deposit.id, memo);
+      } else if (typeof body.memo === 'string' && body.memo.trim()) {
+        db.setMemo(deposit.id, body.memo.trim().slice(0, 500));
+      }
+      if (!db.claim(deposit.id, odId, manual)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
       try {
-        await shop.confirm(odId, deposit.amount);
+        await shop.confirm(odId, { expectMisu: manual ? null : deposit.amount });
       } catch (e) {
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
       }
-      return json(res, 200, { ok: true, od_id: odId });
+      return json(res, 200, { ok: true, od_id: odId, manual });
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {
@@ -164,7 +185,7 @@ const server = http.createServer(async (req, res) => {
 
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       const html = await readFile(new URL('./public/index.html', import.meta.url));
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(html);
     }
 
