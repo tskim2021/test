@@ -20,6 +20,7 @@ if (!API_TOKEN) {
 
 const db = openDb();
 const shop = await createShop();
+shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건`)).catch((e) => console.error('쇼핑몰 DB 연결 실패:', e.message));
 const isAdmin = (req, url) => !!ADMIN_TOKEN && safeEq(tokenOf(req, url), ADMIN_TOKEN);
 const clients = new Set();
 

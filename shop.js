@@ -7,8 +7,9 @@ export async function createShop(env = process.env) {
   if (!env.SHOP_DB_NAME) return null;
   const mysql = (await import('mysql2/promise')).default;
   const pool = mysql.createPool({
-    host: env.SHOP_DB_HOST || '127.0.0.1',
-    port: Number(env.SHOP_DB_PORT || 3306),
+    ...(env.SHOP_DB_SOCKET
+      ? { socketPath: env.SHOP_DB_SOCKET }
+      : { host: env.SHOP_DB_HOST || '127.0.0.1', port: Number(env.SHOP_DB_PORT || 3306) }),
     user: env.SHOP_DB_USER,
     password: env.SHOP_DB_PASSWORD,
     database: env.SHOP_DB_NAME,
@@ -27,6 +28,11 @@ export function shopFromPool(pool, prefix = 'g5_') {
 
   return {
     close: () => pool.end(),
+    // 연결 확인용: 주문 테이블 건수
+    async ping() {
+      const [[r]] = await pool.query(`SELECT COUNT(*) AS n FROM ${O}`);
+      return Number(r.n);
+    },
     // 입금자명과 금액이 모두 일치하는 '주문' 상태 주문(미수금 = 입금액)과 그 장바구니 상품을 돌려준다.
     async candidatesFor({ sender, amount }) {
       const name = norm(sender);
