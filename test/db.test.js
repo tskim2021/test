@@ -76,14 +76,15 @@ test('메모 저장과 수동 처리 표시', () => {
 test('candidates/all: 주문일자 검색용 조회', () => {
   const db = mk();
   const ids = (rows) => rows.map((r) => r.sender).sort();
-  assert.deepEqual(ids(db.candidates({ names: ['강애진'], amounts: [], odIds: [] })), ['강애진']);
-  assert.deepEqual(ids(db.candidates({ names: [], amounts: [1000, 3000], odIds: [] })), ['100%_할인', '김미희']);
+  assert.deepEqual(ids(db.candidates({ names: ['강애진'], ranges: [], odIds: [] })), ['강애진']);
+  assert.deepEqual(ids(db.candidates({ names: [], ranges: [[1000, 1000], [3000, 3000]], odIds: [] })), ['100%_할인', '김미희']);
   const k = db.search({}).rows.find((r) => r.sender === '김미희');
   db.claim(k.id, 'A55');
-  assert.deepEqual(ids(db.candidates({ names: [], amounts: [], odIds: ['A55'] })), ['김미희']);
-  assert.deepEqual(ids(db.candidates({ names: ['강애진'], amounts: [], odIds: [], q: '미' })), []); // q 와 함께 걸러짐
-  assert.deepEqual(ids(db.candidates({ names: [], amounts: [1000, 2000], odIds: [], q: '미' })), ['김미희']); // q 가 맞으면 남음
-  assert.deepEqual(ids(db.candidates({ names: [], amounts: [1000, 2000], odIds: [], q: '%' })), []); // LIKE 특수문자는 문자 그대로
+  assert.deepEqual(ids(db.candidates({ names: [], ranges: [], odIds: ['A55'] })), ['김미희']);
+  assert.deepEqual(ids(db.candidates({ names: ['강애진'], ranges: [], odIds: [], q: '미' })), []); // q 와 함께 걸러짐
+  assert.deepEqual(ids(db.candidates({ names: [], ranges: [[900, 1100], [2000, 2000]], odIds: [], q: '미' })), ['김미희']); // q 가 맞으면 남음
+  assert.deepEqual(ids(db.candidates({ names: [], ranges: [[900, 1100], [2000, 2000]], odIds: [], q: '%' })), []); // LIKE 특수문자는 문자 그대로
+  assert.deepEqual(ids(db.candidates({ names: [], ranges: [[950, 1050]], odIds: [] })), ['김미희']); // 금액 범위(환율 올림 오차 허용)
   assert.equal(db.all({ from: '2026-10-28', to: '2026-10-28' }).length, 2);
   assert.equal(db.all({}).length, 3);
   db.hide([k.id]);

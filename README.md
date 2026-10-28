@@ -78,7 +78,16 @@ SHOP_DB_PASSWORD=...
 SHOP_DB_NAME=...
 SHOP_TABLE_PREFIX=g5_
 ```
-설정 후 `sudo systemctl restart deposit`. `SHOP_DB_NAME` 또는 `ADMIN_TOKEN` 이 없으면 이 기능은 꺼져 있습니다.
+```
+SHOP_CURRENCY=USD          # 기본 USD(달러 쇼핑몰). 금액이 원화면 KRW
+SHOP_USD_KRW=              # 비우면 환율을 자동으로 찾음: 쇼핑몰 DB → 쇼핑몰 사이트 상품 페이지(exchange_rate). 직접 지정도 가능
+SHOP_URL=https://ameyokovip.com   # 상품 이미지/상품보기 링크의 기준 주소
+```
+설정 후 `sudo systemctl restart deposit`.
+
+**달러 쇼핑몰의 금액 일치**: 고객이 입금해야 하는 원화는 `ceil(미수금(USD) × 환율 / 100) × 100`(100원 단위 올림)입니다.
+입금액이 이 값과 ±100원 안이고 입금자명이 같으면 "이름·금액 일치"로 봅니다. 오른쪽 패널에 달러 금액, 환율 계산 금액, 차액,
+상품 이미지, `상품보기`(쇼핑몰 상품 페이지, 새 창)가 표시됩니다. `SHOP_DB_NAME` 또는 `ADMIN_TOKEN` 이 없으면 이 기능은 꺼져 있습니다.
 
 - **매칭 기준**: `od_status='주문'` 이고 `od_misu`(미수금) = 입금액, 입금자명(`od_deposit_name`, 비어 있으면 `od_name`) = 입금자(공백 무시)
 - **처리 내용**(그누보드 관리자의 입금 처리와 같은 결과): `od_status='입금'`, `od_receipt_price += 입금액`, `od_misu -= 입금액`,

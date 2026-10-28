@@ -25,9 +25,10 @@ shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건
 // field='all' 이면 입금 시각이 기간에 드는 입금도 합친다.
 async function orderDateRows({ field, from, to, q }) {
   const orders = await shop.ordersInRange(from, to);
-  const { names, amounts, odIds } = orderKeys(orders);
-  const cand = db.candidates({ q, names: [...names], amounts: [...amounts], odIds: [...odIds] });
-  const related = relatedDepositIds(orders, cand);
+  const rate = (await shop.getRate())?.rate || null;
+  const { names, ranges, odIds } = orderKeys(orders, rate);
+  const cand = db.candidates({ q, names: [...names], ranges, odIds: [...odIds] });
+  const related = relatedDepositIds(orders, cand, rate);
   const rows = cand.filter((d) => related.has(d.id));
   if (field === 'all') {
     const have = new Set(rows.map((r) => r.id));
@@ -153,7 +154,7 @@ const server = http.createServer(async (req, res) => {
       if (!deposit) return json(res, 404, { error: 'not found' });
       const confirmed = db.matchedOrder(deposit.id);
       const related = confirmed ? { full: [], name: [], amount: [], other: [] } : await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
-      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at, memo: deposit.memo }, confirmed_order: confirmed, candidates: related.full, related: { name: related.name, amount: related.amount, other: related.other } });
+      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at, memo: deposit.memo }, confirmed_order: confirmed, currency: shop.currency, rate: await shop.getRate(), candidates: related.full, related: { name: related.name, amount: related.amount, other: related.other } });
     }
 
     // 메모(처리 사유 등) 저장 — 관리자 전용
@@ -190,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       }
       if (!db.claim(deposit.id, odId, manual)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
       try {
-        await shop.confirm(odId, { expectMisu: manual ? null : deposit.amount });
+        await shop.confirm(odId, { expectKrw: manual ? null : deposit.amount });
       } catch (e) {
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });

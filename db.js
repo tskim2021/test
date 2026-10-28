@@ -68,15 +68,15 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
     // 주문일자 검색용: 이름/금액/연결 주문번호 중 하나라도 걸리는 입금(숨김 제외)을 전부 돌려준다(페이지 처리는 호출 쪽에서).
-    candidates({ q, names = [], amounts = [], odIds = [], limit = 5000 } = {}) {
+    candidates({ q, names = [], ranges = [], odIds = [], limit = 5000 } = {}) {
       const where = ['d.hidden = 0'];
       const args = [];
-      // 인자는 SQL 의 ? 순서와 같아야 한다: q 조건이 먼저, 그 다음 json_each 세 개
+      // 인자는 SQL 의 ? 순서와 같아야 한다: q 조건이 먼저, 그 다음 json_each 세 개(이름 목록, 금액 범위 [[최소,최대]…], 주문번호 목록)
       if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
-      args.push(JSON.stringify(names), JSON.stringify(amounts), JSON.stringify(odIds));
+      args.push(JSON.stringify(names), JSON.stringify(ranges), JSON.stringify(odIds));
       return db.prepare(`${BASE} WHERE ${where.join(' AND ')}
           AND ( REPLACE(d.sender, ' ', '') IN (SELECT value FROM json_each(?))
-             OR d.amount IN (SELECT value FROM json_each(?))
+             OR EXISTS (SELECT 1 FROM json_each(?) j WHERE d.amount BETWEEN json_extract(j.value, '$[0]') AND json_extract(j.value, '$[1]'))
              OR m.od_id IN (SELECT value FROM json_each(?)) )
         ORDER BY d.received_at DESC, d.id DESC LIMIT ${Number(limit)}`).all(...args);
     },

@@ -1,19 +1,19 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShop, classify, bestLevel, orderKeys, relatedDepositIds } from '../shop.js';
+import { createShop, shopFromPool, classify, bestLevel, orderKeys, relatedDepositIds, krwOf } from '../shop.js';
 
 // 실제 MySQL/MariaDB(그누보드 스키마)가 있을 때만 실행: SHOP_DB_NAME 등 환경변수를 설정하세요.
 const skip = !process.env.SHOP_DB_NAME && '쇼핑몰 테스트 DB 미설정';
 
 test('입금자명+금액 일치 후보와 장바구니 상품 조회', { skip }, async () => {
-  const shop = await createShop();
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'KRW' });
   after(() => shop.close());
-  const c = await shop.candidatesFor({ sender: '강애진', amount: 86400 });
+  const c = (await shop.relatedFor({ sender: '강애진', amount: 86400 })).full;
   assert.equal(c.length, 1);
   assert.equal(c[0].items.length, 2);
   assert.equal(c[0].items[0].subtotal, 80000);
-  assert.deepEqual(await shop.candidatesFor({ sender: '강애진', amount: 1 }), []);
-  assert.deepEqual(await shop.candidatesFor({ sender: null, amount: 86400 }), []);
+  assert.equal((await shop.relatedFor({ sender: '강애진', amount: 1 })).full.length, 0);
+  assert.equal((await shop.relatedFor({ sender: null, amount: 86400 })).full.length, 0);
 });
 
 test('입금과 주문의 관계 판정(DB 불필요)', () => {
@@ -32,7 +32,7 @@ test('입금과 주문의 관계 판정(DB 불필요)', () => {
 });
 
 test('DB: 입금별 일치 수준과 관련 주문', { skip }, async () => {
-  const shop = await createShop();
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'KRW' });
   after(() => shop.close());
   const lv = await shop.matchLevels([
     { id: 1, sender: '강애진', amount: 86400 }, // 이름+금액
@@ -49,7 +49,7 @@ test('DB: 입금별 일치 수준과 관련 주문', { skip }, async () => {
 });
 
 test('처리된 주문 번호별 상품·옵션 조회', { skip }, async () => {
-  const shop = await createShop();
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'KRW' });
   after(() => shop.close());
   const m = await shop.itemsByOrder(['A2026102801']);
   assert.deepEqual(m['A2026102801'].map((i) => [i.name, i.option, i.qty]), [['선물세트 A', '', 2], ['쿠키 박스', '색상 빨강', 2]]);
@@ -57,7 +57,7 @@ test('처리된 주문 번호별 상품·옵션 조회', { skip }, async () => {
 });
 
 test('DB: 문자 포함 주문번호, DECIMAL 금액은 숫자로, 시각은 DB 값 그대로', { skip }, async () => {
-  const shop = await createShop();
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'KRW' });
   after(() => shop.close());
   const rel = await shop.relatedFor({ sender: '강애진', amount: 5000 });
   const o = rel.name[0];
@@ -78,7 +78,7 @@ test('주문일자 검색: 주문 목록과 관계있는 입금만 고른다(DB 
   ];
   const k = orderKeys(orders);
   assert.deepEqual([...k.names].sort(), ['박서준', '이상덕']);
-  assert.deepEqual([...k.amounts].sort((a, b) => a - b), [0, 0, 0, 32900 + 3000, 35900].sort((a, b) => a - b).filter((v, i, arr) => arr.indexOf(v) === i));
+  assert.deepEqual(k.ranges, [[35900, 35900]]); // 미입금('주문') 주문의 금액만, 같은 값은 하나로
   assert.deepEqual([...k.odIds].sort(), ['A1', 'A2']);
   const deps = [
     { id: 1, sender: '이상덕', amount: 35900, order_id: null },   // 이름+금액
@@ -90,4 +90,72 @@ test('주문일자 검색: 주문 목록과 관계있는 입금만 고른다(DB 
     { id: 7, sender: '이상덕', amount: 35900, order_id: 'A9' },   // 다른 주문과 연결됨 -> 제외
   ];
   assert.deepEqual([...relatedDepositIds(orders, deps)].sort(), [1, 2, 3, 5, 6]);
+});
+
+// ---- 달러 쇼핑몰: 원화 = ceil(USD × 환율 / 100) × 100 ----
+test('환율 환산: 100원 단위 올림 (실제 주문 사례)', () => {
+  assert.equal(krwOf(19.8, 1329), 26400);   // 곽도빈: 26,314.2 -> 26,400
+  assert.equal(krwOf(621, 1329), 825400);   // 이전희: 825,309 -> 825,400
+  assert.equal(krwOf(27, 1329), 35900);     // 35,883 -> 35,900
+  assert.equal(krwOf(50, 1329), 66500);     // 66,450 -> 66,500
+  assert.equal(krwOf(100, 1300), 130000);   // 딱 떨어지면 그대로(부동소수점 잡음에 올리지 않음)
+});
+
+test('달러 주문 판정: 환산 금액이 입금액과 맞으면 full', () => {
+  const o = { od_name: '곽도빈', od_deposit_name: '곽도빈', od_status: '주문', od_misu: 19.8, od_receipt_price: 0, od_cart_price: 22, od_send_cost: 0, od_send_cost2: 0 };
+  assert.equal(classify(o, { sender: '곽도빈', amount: 26400 }, 1329), 'full');
+  assert.equal(classify(o, { sender: '곽도빈', amount: 26400 }, null), 'name'); // 환율 없이 비교하면 금액이 다르다
+  assert.equal(classify(o, { sender: '곽도빈', amount: 29300 }, 1329), 'name'); // 상품+배송(22)은 29,238 -> 미수금과는 다름
+  assert.equal(classify(o, { sender: '다른사람', amount: 26400 }, 1329), 'amount');
+  assert.equal(classify(o, { sender: '곽도빈', amount: 26500 }, 1329), 'full'); // 올림 방식 차이(±100원) 허용
+  assert.equal(classify(o, { sender: '곽도빈', amount: 26600 }, 1329), 'name');
+  assert.equal(classify({ ...o, od_misu: 0, od_receipt_price: 0, od_cart_price: 0 }, { sender: '곽도빈', amount: 50 }, 1329), 'name'); // 0원 주문은 금액 일치로 보지 않음
+  const k = orderKeys([o], 1329);
+  assert.deepEqual(k.ranges.sort((a, b) => a[0] - b[0]), [[26300, 26500], [29200, 29400]]); // 미수금(19.8) / 상품+배송(22) 환산 ±100
+  const ids = relatedDepositIds([{ ...o, od_id: 'A1' }], [
+    { id: 1, sender: '곽도빈', amount: 26400, order_id: null },
+    { id: 2, sender: '모름', amount: 26450, order_id: null },
+    { id: 3, sender: '모름', amount: 5000, order_id: null },
+  ], 1329);
+  assert.deepEqual([...ids].sort(), [1, 2]);
+});
+
+test('환율 찾기: 설정 > 쇼핑몰 DB > 쇼핑몰 사이트, 원화 쇼핑몰은 환산 안 함', async () => {
+  const mk = (rows, extra = {}) => ({
+    query: async (sql) => {
+      if (sql.includes('information_schema')) return [rows.cols || []];
+      if (sql.includes('FROM `g5_shop_default`')) return [[{ v: rows.v }]];
+      if (sql.includes('g5_shop_item')) return [[{ it_id: 'X1' }]];
+      throw new Error('unexpected ' + sql);
+    }, ...extra,
+  });
+  const dbRate = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_exchange_rate' }], v: '1329.0000' }), 'g5_', { currency: 'USD' }).getRate();
+  assert.deepEqual([dbRate.rate, dbRate.source.includes('g5_shop_default.de_exchange_rate')], [1329, true]);
+  const bad = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_tax_rate' }], v: '10' }), 'g5_', { currency: 'USD', shopUrl: 'http://x.invalid' }).getRate();
+  assert.equal(bad, null); // 범위(500~3000) 밖 값은 환율로 보지 않고, 사이트 조회도 실패하면 null
+  const origFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ text: async () => '<input type="hidden" id="exchange_rate" value="1329.0000">' });
+  try {
+    const site = await shopFromPool(mk({ cols: [] }), 'g5_', { currency: 'USD' }).getRate();
+    assert.deepEqual([site.rate, site.source], [1329, '쇼핑몰 사이트 환율']);
+  } finally { globalThis.fetch = origFetch; }
+  assert.equal((await shopFromPool(mk({}), 'g5_', { currency: 'USD', usdKrw: '1400' }).getRate()).rate, 1400);
+  assert.equal(await shopFromPool(mk({}), 'g5_', { currency: 'KRW' }).getRate(), null);
+});
+
+test('DB(USD): 환산 일치, 이미지·상품 링크·원화 표기', { skip }, async () => {
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'USD', SHOP_USD_KRW: '1329', SHOP_URL: 'https://shop.test/' });
+  after(() => shop.close());
+  const lv = await shop.matchLevels([{ id: 1, sender: '곽도빈', amount: 26400 }, { id: 2, sender: '테스터', amount: 825400 }, { id: 3, sender: '곽도빈', amount: 5 }]);
+  assert.deepEqual([...lv], [[1, 'full'], [2, 'full'], [3, 'name']]);
+  const full = (await shop.relatedFor({ sender: '곽도빈', amount: 26400 })).full;
+  assert.equal(full.length, 1);
+  const o = full[0];
+  assert.deepEqual([o.od_misu, o.od_misu_krw, o.od_total, o.od_total_krw], [19.8, 26400, 22, 29300]);
+  const it = o.items[0];
+  assert.equal(it.image, 'https://shop.test/data/item/IT10/a.jpg');
+  assert.equal(it.url, 'https://shop.test/shop/item.php?it_id=IT10');
+  assert.deepEqual([it.price, it.price_krw, it.subtotal_krw], [22, 29238, 29238]); // 쇼핑몰 상품 페이지처럼 내림
+  const noImg = (await shop.relatedFor({ sender: '곽도빈', amount: 26400 })).full[0].items;
+  assert.ok(noImg.every((x) => typeof x.image === 'string'));
 });
