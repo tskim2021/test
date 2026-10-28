@@ -142,6 +142,13 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
     }
 
+    // 푸시 테스트: 입금 기록을 만들지 않고, 연결된 앱/웹에 테스트 이벤트만 보낸다. listeners = 지금 연결된 수신기 수.
+    if (req.method === 'POST' && url.pathname === '/api/push/test') {
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      broadcast('test', { at: new Date().toISOString() });
+      return json(res, 200, { ok: true, listeners: clients.size });
+    }
+
     // 앱 푸시 따라잡기: 연결이 끊긴 사이의 '처리 필요'(새 입금)와 '처리 완료'를 돌려준다.
     // ?deposit=마지막으로 본 입금 id&processed=마지막으로 본 처리 시각(ISO). 둘 다 없으면 기준점(max_id, now)만 돌려준다.
     if (req.method === 'GET' && url.pathname === '/api/push/since') {

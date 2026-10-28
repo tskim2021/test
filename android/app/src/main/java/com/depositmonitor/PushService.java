@@ -49,6 +49,7 @@ public class PushService extends Service {
 
     @Override
     public void onDestroy() {
+        new Store(this).setPushState("서비스 꺼짐");
         running = false;
         HttpURLConnection c = conn;
         if (c != null) c.disconnect();
@@ -57,6 +58,7 @@ public class PushService extends Service {
     }
 
     private void status(String text) {
+        new Store(this).setPushState(text);
         getSystemService(android.app.NotificationManager.class).notify(FG_ID, Notifier.status(this, text));
     }
 
@@ -158,7 +160,9 @@ public class PushService extends Service {
     private void handle(Store store, SseParser.Event e) {
         try {
             JSONObject d = new JSONObject(e.data);
-            if (e.name.equals("deposit")) {
+            if (e.name.equals("test")) {
+                Notifier.test(this);
+            } else if (e.name.equals("deposit")) {
                 if (!store.advanceDeposit(d.optLong("id"))) return; // 이미 알린 입금
                 Notifier.needs(this, d);
             } else if (e.name.equals("processed")) {

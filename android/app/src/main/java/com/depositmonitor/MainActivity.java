@@ -223,6 +223,25 @@ public class MainActivity extends Activity {
         root.addView(push);
         root.addView(text("※ 푸시를 켜면 상태 표시줄에 '실시간 연결됨' 알림이 계속 표시됩니다(연결 유지를 위해 필요).", 12, false));
 
+        root.addView(button("푸시 테스트 (서버가 이 폰으로 알림 보내기)", v -> {
+            store.log("푸시 테스트 요청 중…");
+            new Thread(() -> {
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(
+                            store.serverUrl() + "/api/push/test?token=" + java.net.URLEncoder.encode(store.token(), "UTF-8")).openConnection();
+                    c.setRequestMethod("POST");
+                    c.setConnectTimeout(10_000); c.setReadTimeout(10_000);
+                    int code = c.getResponseCode();
+                    if (code != 200) { store.log("푸시 테스트 실패: 서버 응답 " + code + (code == 401 ? " (토큰 확인)" : "")); return; }
+                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
+                    int n = new org.json.JSONObject(r.readLine()).optInt("listeners", -1);
+                    store.log(n > 0 ? "푸시 테스트 전송됨 (서버에 연결된 수신기 " + n + "개) · 곧 알림이 와야 합니다"
+                                    : "서버에 연결된 수신기가 없습니다 · 이 폰의 푸시 연결이 끊겨 있어요(위 '푸시 연결' 참고)");
+                } catch (Exception e) {
+                    store.log("푸시 테스트 실패: " + e.getMessage());
+                }
+            }).start();
+        }));
         root.addView(button("1) 알림 접근 허용 설정 열기 (카카오뱅크 알림 읽기)", v ->
             startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));
         root.addView(button("2) 배터리 최적화 설정 열기 (제외 권장)", v ->
@@ -277,10 +296,21 @@ public class MainActivity extends Activity {
         String warn = url.startsWith("http://") ? "\n⚠ http:// 는 토큰이 암호화되지 않습니다. 가능하면 https 사용" : "";
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
+                + "\n푸시 연결: " + pushStateText()
                 + "\n알림 권한: " + (notifGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 3번에서 허용)")
                 + "\n전송 대기: " + store.queueSize() + "건" + warn);
         String log = store.logText();
         logView.setText(log.isEmpty() ? "아직 로그가 없습니다." : log);
+    }
+
+    /** 푸시 서비스의 마지막 상태와 그 시각(너무 오래되면 서비스가 죽었을 수 있다). */
+    private String pushStateText() {
+        if (!store.pushEnabled()) return "꺼짐";
+        long at = store.pushStateAt();
+        long sec = at == 0 ? -1 : (System.currentTimeMillis() - at) / 1000;
+        String s = store.pushState();
+        if (sec < 0) return "아직 시작 전 (서버 주소/토큰 저장 후 시작됩니다)";
+        return s + (sec >= 60 ? " · " + (sec / 60) + "분 전 기준" : "");
     }
 
     private boolean isListenerEnabled() {

@@ -51,6 +51,11 @@ final class Notifier {
 
     static void done(Context c, org.json.JSONObject p) { post(c, CH_DONE, (int) p.optLong("id"), PushText.processed(p)); }
 
+    /** 서버에서 보낸 테스트 푸시 */
+    static void test(Context c) {
+        post(c, CH_NEEDS, 999999, new String[] { "🔔 푸시 테스트", "서버 → 앱 푸시가 정상입니다. 입금이 들어오면 이렇게 알려 드려요" });
+    }
+
     /** 따라잡기에서 너무 많을 때 한 건으로 묶는다. */
     static void summary(Context c, int count) {
         post(c, CH_NEEDS, 0, new String[] { "💰 처리 필요 " + count + "건", "연결이 끊긴 사이 들어온 입금입니다. 목록에서 확인하세요" });
