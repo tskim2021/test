@@ -51,9 +51,18 @@ final class Notifier {
 
     static void done(Context c, org.json.JSONObject p) { post(c, CH_DONE, (int) p.optLong("id"), PushText.processed(p)); }
 
-    /** 서버에서 보낸 테스트 푸시 */
-    static void test(Context c) {
-        post(c, CH_NEEDS, 999999, new String[] { "🔔 푸시 테스트", "서버 → 앱 푸시가 정상입니다. 입금이 들어오면 이렇게 알려 드려요" });
+    /** 서버에서 보낸 테스트 푸시. kind: basic / needs(처리 필요 예시) / done(처리 완료 예시). 실제 알림과 구분되도록 [테스트]를 붙이고 알림 번호도 따로 쓴다. */
+    static void test(Context c, org.json.JSONObject d) {
+        String kind = d == null ? "basic" : d.optString("kind", "basic");
+        if (kind.equals("needs")) {
+            String[] t = PushText.needsProcessing(d);
+            post(c, CH_NEEDS, 999998, new String[] { "[테스트] " + t[0], t[1] });
+        } else if (kind.equals("done")) {
+            String[] t = PushText.processed(d);
+            post(c, CH_DONE, 999997, new String[] { "[테스트] " + t[0], t[1] });
+        } else {
+            post(c, CH_NEEDS, 999999, new String[] { "🔔 푸시 테스트", "서버 → 앱 푸시가 정상입니다. 입금이 들어오면 이렇게 알려 드려요" });
+        }
     }
 
     /** 따라잡기에서 너무 많을 때 한 건으로 묶는다. */

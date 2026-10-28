@@ -161,7 +161,7 @@ public class PushService extends Service {
         try {
             JSONObject d = new JSONObject(e.data);
             if (e.name.equals("test")) {
-                Notifier.test(this);
+                Notifier.test(this, d);
             } else if (e.name.equals("deposit")) {
                 if (!store.advanceDeposit(d.optLong("id"))) return; // 이미 알린 입금
                 Notifier.needs(this, d);

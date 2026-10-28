@@ -142,24 +142,53 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
     }
 
-    // 푸시 테스트 링크: 브라우저로 열면 테스트 푸시를 보내고 결과 화면을 보여 준다.  /push-test?token=접속토큰
+    // 푸시 테스트 링크: 브라우저로 열면 테스트 푸시를 보내고 결과 화면을 보여 준다.
+    //   /push-test?token=접속토큰                                  → 기본 테스트
+    //   /push-test?token=…&kind=needs&sender=홍길동&amount=35900&level=full  → '처리 필요' 예시
+    //   /push-test?token=…&kind=done&sender=홍길동&amount=35900&manual=1&memo=사유 → '처리 완료' 예시
+    // 입금 기록을 만들지 않고, 앱의 '이미 알린 입금' 기준(id)에도 영향을 주지 않는 'test' 이벤트로만 보낸다.
     if (req.method === 'GET' && url.pathname === '/push-test') {
       res.setHeader('cache-control', 'no-store');
+      const esc = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      const page = (status, body) => {
+        res.writeHead(status, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>푸시 테스트</title>
+<body style="font:17px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:20px;max-width:560px;margin:0 auto">${body}</body></html>`);
+      };
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) {
-        res.writeHead(401, { 'content-type': 'text/html; charset=utf-8' });
-        return res.end('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px sans-serif;padding:24px"><h2>❌ 토큰이 올바르지 않습니다</h2><p>주소 끝의 <code>?token=</code> 뒤에 접속 토큰을 넣어 주세요.</p>');
+        return page(401, '<h2>❌ 토큰이 올바르지 않습니다</h2><p>주소 끝의 <code>?token=</code> 뒤에 접속 토큰을 넣어 주세요.</p>');
       }
-      broadcast('test', { at: new Date().toISOString() });
+      const q = url.searchParams;
+      const kind = ['needs', 'done'].includes(q.get('kind')) ? q.get('kind') : 'basic';
+      const sender = (q.get('sender') ?? '홍길동').slice(0, 20);
+      const amount = Number.isInteger(Number(q.get('amount'))) && Number(q.get('amount')) > 0 ? Number(q.get('amount')) : 35900;
+      const level = ['full', 'name', 'amount', 'other', 'none'].includes(q.get('level')) ? q.get('level') : 'full';
+      const manual = q.get('manual') === '1';
+      const memo = (q.get('memo') ?? '').slice(0, 100);
+      const payload = { at: new Date().toISOString(), kind };
+      if (kind === 'needs') Object.assign(payload, { sender, amount, shop: true, match_level: level === 'none' ? null : level });
+      if (kind === 'done') Object.assign(payload, { sender, amount, od_id: 'A-TEST-0001', manual, memo });
+      broadcast('test', payload);
       const n = clients.size;
-      const ok = n > 0;
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>푸시 테스트</title>
-<body style="font:18px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:24px;max-width:520px;margin:0 auto">
-<h2>${ok ? '✅ 테스트 푸시를 보냈습니다' : '⚠️ 연결된 수신기가 없습니다'}</h2>
-<p>서버에 연결된 수신기: <b>${n}개</b> (앱 + 열려 있는 웹 화면)</p>
-<p>${ok ? '폰에 <b>🔔 푸시 테스트</b> 알림이 와야 합니다. 오지 않으면 앱 설정 탭의 <b>푸시 연결</b> 상태와 알림 권한을 확인하세요.' : '앱이 서버에 연결돼 있지 않습니다. 앱 설정 탭에서 <b>푸시 연결: 실시간 연결됨</b>인지 확인하세요.'}</p>
-<p><a href="" style="display:inline-block;padding:10px 18px;border:1px solid #1f9d55;border-radius:10px;color:#1f9d55;text-decoration:none">다시 보내기</a></p>
-</body></html>`);
+      const tok = esc(tokenOf(req, url));
+      const label = { basic: '기본 테스트', needs: `처리 필요 예시 (${sender} ${amount.toLocaleString('ko-KR')}원)`, done: `처리 완료 예시 (${sender} ${amount.toLocaleString('ko-KR')}원)` }[kind];
+      const btn = 'display:inline-block;padding:9px 14px;margin:4px 6px 4px 0;border:1px solid #1f9d55;border-radius:10px;color:#1f9d55;text-decoration:none;font-size:15px';
+      return page(200, `
+<h2>${n > 0 ? '✅ 테스트 푸시를 보냈습니다' : '⚠️ 연결된 수신기가 없습니다'}</h2>
+<p>보낸 것: <b>${esc(label)}</b><br>서버에 연결된 수신기: <b>${n}개</b> (앱 + 열려 있는 웹 화면)</p>
+<p>${n > 0 ? '폰에 알림이 와야 합니다(제목 앞에 <b>[테스트]</b>가 붙습니다). 오지 않으면 앱 설정 탭의 <b>푸시 연결</b> 상태와 알림 권한을 확인하세요.' : '앱이 서버에 연결돼 있지 않습니다. 앱 설정 탭에서 <b>푸시 연결: 실시간 연결됨</b>인지 확인하세요.'}</p>
+<p><a style="${btn}" href="?token=${tok}">기본</a>
+<a style="${btn}" href="?token=${tok}&kind=needs&sender=홍길동&amount=35900&level=full">처리 필요 · 일치</a>
+<a style="${btn}" href="?token=${tok}&kind=needs&sender=김철수&amount=825400&level=name">처리 필요 · 이름만</a>
+<a style="${btn}" href="?token=${tok}&kind=needs&sender=모르는사람&amount=9999&level=none">처리 필요 · 주문 없음</a>
+<a style="${btn}" href="?token=${tok}&kind=done&sender=홍길동&amount=35900">처리 완료</a>
+<a style="${btn}" href="?token=${tok}&kind=done&sender=김철수&amount=825400&manual=1&memo=환율%20차이%20확인">처리 완료 · 수동</a></p>
+<hr><form method="get"><input type="hidden" name="token" value="${tok}">
+<p>직접 보내기<br>
+<select name="kind"><option value="needs">처리 필요</option><option value="done">처리 완료</option></select>
+<input name="sender" value="${esc(sender)}" size="8" placeholder="입금자"> <input name="amount" value="${amount}" size="8" inputmode="numeric" placeholder="금액">
+<select name="level"><option value="full">이름·금액 일치</option><option value="name">이름만</option><option value="amount">금액만</option><option value="other">이미 처리된 주문</option><option value="none">일치 없음</option></select>
+<button>보내기</button></p></form>`);
     }
 
     // 푸시 테스트: 입금 기록을 만들지 않고, 연결된 앱/웹에 테스트 이벤트만 보낸다. listeners = 지금 연결된 수신기 수.
