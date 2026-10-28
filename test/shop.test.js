@@ -1,6 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShop } from '../shop.js';
+import { createShop, classify, bestLevel } from '../shop.js';
 
 // 실제 MySQL/MariaDB(그누보드 스키마)가 있을 때만 실행: SHOP_DB_NAME 등 환경변수를 설정하세요.
 const skip = !process.env.SHOP_DB_NAME && '쇼핑몰 테스트 DB 미설정';
@@ -16,14 +16,36 @@ test('입금자명+금액 일치 후보와 장바구니 상품 조회', { skip }
   assert.deepEqual(await shop.candidatesFor({ sender: null, amount: 86400 }), []);
 });
 
-test('입금 목록에서 일치하는 주문이 있는 입금만 골라낸다', { skip }, async () => {
+test('입금과 주문의 관계 판정(DB 불필요)', () => {
+  const o = { od_name: '이상덕', od_deposit_name: '', od_status: '주문', od_misu: 35900, od_receipt_price: 0, od_cart_price: 32900, od_send_cost: 3000, od_send_cost2: 0 };
+  assert.equal(classify(o, { sender: '이상덕', amount: 35900 }), 'full');
+  assert.equal(classify(o, { sender: '이 상 덕', amount: 35900 }), 'full'); // 공백 무시
+  assert.equal(classify(o, { sender: '이상덕', amount: 30000 }), 'name'); // 이름만
+  assert.equal(classify(o, { sender: '홍길동', amount: 35900 }), 'amount'); // 금액만
+  assert.equal(classify(o, { sender: '홍길동', amount: 1 }), null);
+  assert.equal(classify({ ...o, od_deposit_name: '다른이름' }, { sender: '이상덕', amount: 35900 }), 'name'); // 입금자명이 다르면 완전일치 아님
+  assert.equal(classify({ ...o, od_status: '입금', od_misu: 0, od_receipt_price: 35900 }, { sender: '이상덕', amount: 35900 }), 'other');
+  assert.equal(classify({ ...o, od_status: '입금' }, { sender: '이상덕', amount: 1 }), null);
+  assert.equal(bestLevel(['amount', 'name', null]), 'name');
+  assert.equal(bestLevel(['name', 'full', 'other']), 'full');
+  assert.equal(bestLevel([null]), null);
+});
+
+test('DB: 입금별 일치 수준과 관련 주문', { skip }, async () => {
   const shop = await createShop();
   after(() => shop.close());
-  const ids = await shop.matchedIds([
-    { id: 1, sender: '강애진', amount: 86400 }, { id: 2, sender: '모르는사람', amount: 86400 },
-    { id: 3, sender: '강애진', amount: 1 }, { id: 4, sender: null, amount: 86400 },
+  const lv = await shop.matchLevels([
+    { id: 1, sender: '강애진', amount: 86400 }, // 이름+금액
+    { id: 2, sender: '강애진', amount: 5000 },  // 이름만
+    { id: 3, sender: '아무개', amount: 86400 }, // 금액만
+    { id: 4, sender: '박서준', amount: 30000 }, // 이미 입금된 주문
+    { id: 5, sender: '모르는사람', amount: 7 }, // 없음
   ]);
-  assert.deepEqual([...ids], [1]);
+  assert.deepEqual([...lv], [[1, 'full'], [2, 'name'], [3, 'amount'], [4, 'other']]);
+  const rel = await shop.relatedFor({ sender: '강애진', amount: 5000 });
+  assert.equal(rel.name.length, 1);
+  assert.equal(rel.name[0].items.length, 2);
+  assert.equal(rel.full.length, 0);
 });
 
 test('처리된 주문 번호별 상품·옵션 조회', { skip }, async () => {

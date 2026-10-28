@@ -97,15 +97,15 @@ const server = http.createServer(async (req, res) => {
       const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
       const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
-      let matched = new Set();
+      let levels = new Map();
       if (shop && ADMIN_TOKEN) {
-        try { matched = await shop.matchedIds(rows.filter((r) => !r.order_id)); } catch (e) { console.error('주문 매칭 조회 실패:', e.message); }
+        try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { console.error('주문 매칭 조회 실패:', e.message); }
       }
       let orderItems = {};
       if (shop && ADMIN_TOKEN) {
         try { orderItems = await shop.itemsByOrder([...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))]); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
       }
-      const deposits = rows.map((r) => ({ ...r, matched: matched.has(r.id), order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
+      const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN });
     }
 
@@ -127,7 +127,8 @@ const server = http.createServer(async (req, res) => {
       if (!deposit) return json(res, 404, { error: 'not found' });
       const confirmed = db.matchedOrder(deposit.id);
       const candidates = confirmed ? [] : await shop.candidatesFor({ sender: deposit.sender, amount: deposit.amount });
-      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at }, confirmed_order: confirmed, candidates });
+      const related = confirmed ? { name: [], amount: [], other: [] } : await shop.relatedFor({ sender: deposit.sender, amount: deposit.amount });
+      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at }, confirmed_order: confirmed, candidates, related: { name: related.name, amount: related.amount, other: related.other } });
     }
 
     // 관리자 '주문완료' — 후보 목록에 있는 주문만 입금 처리한다
