@@ -162,7 +162,7 @@ public class MainActivity extends Activity {
         if (!webLoaded || forceReload) {
             try {
                 // 토큰은 주소의 # 뒤에 붙여 보낸다(서버로 전송되지 않고, 웹이 읽어 로그인한다).
-                web.loadUrl(store.serverUrl() + "/#token=" + URLEncoder.encode(store.token(), "UTF-8"));
+                web.loadUrl(store.serverUrl() + "/#token=" + URLEncoder.encode(store.token(), "UTF-8") + "&app=1"); // app=1: 목록을 최소화(상세는 눌러서)
                 webLoaded = true;
             } catch (Exception ignored) { }
         }

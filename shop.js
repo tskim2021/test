@@ -200,8 +200,10 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
   const shapeItem = (i, rate) => {
     const price = num(i.ct_price) + num(i.io_price);
     const subtotal = price * num(i.ct_qty);
+    // 그누보드는 옵션이 여러 개면 io_id 에 구분자(chr(30))로 이어 붙인다 → 한 줄에 하나씩 보여주도록 배열로도 준다.
+    const options = String(i.io_id || '').split(/[\x1e]/).map((x) => x.trim()).filter(Boolean);
     return {
-      it_id: i.it_id, name: i.it_name, option: i.io_id || '', qty: num(i.ct_qty), price, subtotal, status: i.ct_status,
+      it_id: i.it_id, name: i.it_name, option: options.join(' / '), options, qty: num(i.ct_qty), price, subtotal, status: i.ct_status,
       price_krw: rate ? Math.floor(price * rate) : null, subtotal_krw: rate ? Math.floor(subtotal * rate) : null, // 쇼핑몰 상품 페이지와 같은 내림 표기
       image: imageUrl(i.it_img1), url: `${shopUrl}/shop/item.php?it_id=${encodeURIComponent(i.it_id)}`,
     };
@@ -226,11 +228,23 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       const [[r]] = await pool.query(`SELECT COUNT(*) AS n FROM ${O}`);
       return num(r.n);
     },
-    // 주문번호 목록 -> { od_id: [{name, option, qty}] } (목록에 작게 보여줄 용도)
+    // 주문번호 목록 -> { od_id: [상품(이미지·링크·옵션 배열·가격 포함)] } (처리 완료된 입금 목록에 보여줄 용도)
     async itemsByOrder(odIds) {
+      const rate = (await getRate())?.rate || null;
       const out = {};
-      for (const i of await itemsOf(odIds)) (out[String(i.od_id)] ||= []).push({ name: i.it_name, option: i.io_id || '', qty: num(i.ct_qty) });
+      for (const i of await itemsOf(odIds)) (out[String(i.od_id)] ||= []).push(shapeItem(i, rate));
       return out;
+    },
+    // 주문번호 목록 -> { od_id: { status, usd } }  usd = 실제 입금(결제)된 달러 금액, 없으면 미수금, 그것도 없으면 상품+배송 합계
+    async ordersUsd(odIds) {
+      if (!odIds.length) return {};
+      const [rows] = await pool.query(
+        `SELECT od_id, od_status, od_time, od_misu, od_receipt_price, od_cart_price, od_send_cost, od_send_cost2 FROM ${O} WHERE od_id IN (?)`, [odIds]);
+      return Object.fromEntries(rows.map((o) => [String(o.od_id), {
+        status: o.od_status,
+        time: o.od_time, // 주문 일시(쇼핑몰 한국시간 문자열)
+        usd: num(o.od_receipt_price) > 0 ? num(o.od_receipt_price) : num(o.od_misu) > 0 ? num(o.od_misu) : orderTotal(o),
+      }]));
     },
     // 주문일자(쇼핑몰 주문 시각, 한국시간 문자열) 기간의 주문. from/to 는 'YYYY-MM-DD'.
     async ordersInRange(from, to) {

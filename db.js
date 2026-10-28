@@ -5,7 +5,7 @@ export const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date
 export const kstStart = (d) => new Date(`${d}T00:00:00+09:00`).toISOString();
 export const kstEnd = (d) => new Date(`${d}T23:59:59.999+09:00`).toISOString();
 
-const BASE = 'SELECT d.*, m.od_id AS order_id, m.manual AS order_manual FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id';
+const BASE = 'SELECT d.*, m.od_id AS order_id, m.manual AS order_manual, m.confirmed_at AS processed_at FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id';
 
 // done: 'hide'=처리된 입금 숨김, 'only'=처리된 입금만, 'all'=전부(기본)
 const doneCond = (done) => (done === 'hide' ? 'm.od_id IS NULL' : done === 'only' ? 'm.od_id IS NOT NULL' : null);

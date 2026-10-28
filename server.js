@@ -4,6 +4,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { openDb, isDate } from './db.js';
 import { parseNotification } from './parser.js';
 import { createShop, orderKeys, relatedDepositIds } from './shop.js';
+import { buildChart } from './chart.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -115,6 +116,23 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // 그래프: 같은 조회 조건(기간·일자 기준·입금자)의 시간별/일별/월별 입금 금액(미처리/처리완료 구분)
+    if (req.method === 'GET' && url.pathname === '/api/deposits/chart') {
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      const from = url.searchParams.get('from') || '';
+      const to = url.searchParams.get('to') || '';
+      if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: 'invalid date' });
+      const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
+      const field = ['all', 'order', 'paid'].includes(url.searchParams.get('datefield')) ? url.searchParams.get('datefield') : 'paid';
+      let rows = null;
+      if (field !== 'paid' && shop && ADMIN_TOKEN && (from || to)) {
+        try { rows = await orderDateRows({ field, from, to, q, done: 'all' }); } catch (e) { console.error('그래프 주문일자 조회 실패:', e.message); }
+      }
+      if (!rows) rows = db.all({ from, to, q, done: 'all', limit: 50000 });
+      const today = new Date(Date.now() + 9 * 3600000).toISOString().slice(0, 10);
+      return json(res, 200, buildChart(rows, { from, to, today }));
+    }
+
     // 조회: ?from=YYYY-MM-DD&to=YYYY-MM-DD&q=입금자&limit=10|20|50|100&page=1  (날짜는 한국시간 기준)
     if (req.method === 'GET' && url.pathname === '/api/deposits') {
       if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
@@ -155,11 +173,15 @@ const server = http.createServer(async (req, res) => {
         try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = '주문 매칭 조회 실패: ' + e.message; console.error(matchError); }
       }
       let orderItems = {};
+      let orderUsd = {};
       if (shop && ADMIN_TOKEN) {
-        try { orderItems = await shop.itemsByOrder([...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))]); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
+        const ids = [...new Set(rows.filter((r) => r.order_id).map((r) => r.order_id))];
+        try { orderItems = await shop.itemsByOrder(ids); orderUsd = await shop.ordersUsd(ids); } catch (e) { console.error('주문 상품 조회 실패:', e.message); }
       }
-      const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
-      return json(res, 200, { deposits, count, total, stats, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
+      const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined, order_usd: r.order_id ? orderUsd[r.order_id]?.usd ?? null : undefined, order_time: r.order_id ? orderUsd[r.order_id]?.time ?? null : undefined }));
+      let rateInfo = null;
+      if (shop && ADMIN_TOKEN) { try { rateInfo = await shop.getRate(); } catch { /* 환율 없이 표시 */ } }
+      return json(res, 200, { deposits, count, total, stats, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, currency: shop?.currency ?? null, rate: rateInfo, match_error: matchError });
     }
 
     // 쇼핑몰 점검(관리자): 쇼핑몰이 쓰는 주문 상태 값, 관리자가 직접 처리한 주문 vs 이 모니터가 처리한 주문의 DB 값 비교

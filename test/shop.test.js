@@ -209,3 +209,15 @@ test('DB(USD): 이미 처리된 주문은 입금액으로 환산해 비교, 연�
   assert.deepEqual([after2.od_status, after2.od_receipt_price, Number(after2.has_shop_memo)], ['입금', 39.5, 1]); // 상태/금액 그대로
   assert.equal(await shop.appendNote('NO-SUCH', 'x'), false);
 });
+
+test('DB: 처리 완료 목록용 상품(이미지·옵션 배열)과 달러 금액', { skip }, async () => {
+  const shop = await createShop({ ...process.env, SHOP_CURRENCY: 'USD', SHOP_USD_KRW: '1329', SHOP_URL: 'https://shop.test' });
+  after(() => shop.close());
+  const items = (await shop.itemsByOrder(['A2026102801']))['A2026102801'];
+  assert.deepEqual(items.map((i) => i.options), [[], ['색상 빨강']]);
+  assert.equal(items[0].url, 'https://shop.test/shop/item.php?it_id=A1');
+  const usd = await shop.ordersUsd(['A2026102813', 'A2026102801', 'NOPE']);
+  assert.deepEqual([usd['A2026102813'].usd, usd['A2026102813'].status], [39.5, '입금']); // 입금된 달러 금액
+  assert.equal(usd['A2026102801'].usd, 86400);                                          // 미입금: 미수금
+  assert.equal(usd['NOPE'], undefined);
+});
