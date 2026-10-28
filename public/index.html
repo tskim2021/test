@@ -67,6 +67,18 @@
   .compact .amt { font-size:19px; }
   .compact li .memo, .compact .slot { display:none; }
   .compact li .chev { display:block; color:var(--muted); font-size:22px; line-height:1; }
+  .daynav { display:none; }
+  .daypick { position:absolute; opacity:0; width:1px; height:1px; pointer-events:none; }
+  .compact .daynav { display:flex; align-items:center; gap:6px; position:sticky; top:0; z-index:5; background:var(--bg); padding:6px 0 8px; margin-bottom:6px; }
+  .daynav .navbtn { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:10px; font-size:22px; line-height:1; padding:8px 14px; cursor:pointer; }
+  .daynav .navbtn.small { font-size:13px; padding:10px 10px; }
+  .daynav .navbtn:disabled { opacity:.35; }
+  .daynav .daylabel { flex:1; min-width:0; text-align:center; font-weight:700; font-size:17px; padding:9px 6px; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:10px; cursor:pointer; }
+  .compact .filters { display:none; }
+  .compact.showfilters .filters { display:block; }
+  @keyframes inFromRight { from { transform:translateX(28px); opacity:.25; } }
+  @keyframes inFromLeft { from { transform:translateX(-28px); opacity:.25; } }
+  .slideNext { animation:inFromRight .22s ease-out; } .slidePrev { animation:inFromLeft .22s ease-out; }
   .dtab { display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:15px; margin:10px 0; }
   .dtab dt { color:var(--muted); } .dtab dd { margin:0; font-weight:600; }
   @media (max-width:760px) {
@@ -202,6 +214,14 @@
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 중…</span></div>
   </header>
 
+  <div class="daynav" id="dayNav">
+    <button class="navbtn" id="dayPrev" aria-label="이전 날">‹</button>
+    <button class="daylabel" id="dayLabel">오늘</button>
+    <button class="navbtn" id="dayNext" aria-label="다음 날">›</button>
+    <button class="navbtn small" id="dayToday">오늘</button>
+    <button class="navbtn small" id="filterToggle">필터</button>
+    <input type="date" id="dayPick" class="daypick" tabindex="-1" aria-hidden="true">
+  </div>
   <div class="sumcap" id="sumCap"></div>
   <div class="summary" id="summary">
     <div class="card"><div class="label">미처리 금액</div><div class="value" id="sumPendingTotal">0원</div></div>
@@ -529,6 +549,62 @@ function renderChart(c) {
   });
 }
 
+// ---- 앱: 날짜 이동(좌우 스와이프, ‹ ›, 날짜 눌러서 선택) ----
+const WEEK = ['일', '월', '화', '수', '목', '금', '토'];
+const todayStr = () => ymd(kstNow());
+const spanDays = () => Math.round((Date.parse(state.to + 'T00:00:00Z') - Date.parse(state.from + 'T00:00:00Z')) / DAY) + 1;
+function updateDayNav() {
+  if (!COMPACT) return;
+  const f = state.from, t = state.to, today = todayStr();
+  let label;
+  if (f && f === t) label = `${+f.slice(5, 7)}월 ${+f.slice(8, 10)}일 (${WEEK[new Date(f + 'T00:00:00Z').getUTCDay()]})` + (f === today ? ' · 오늘' : '');
+  else if (f && t) label = `${f.slice(5).replace('-', '.')} ~ ${t.slice(5).replace('-', '.')}`;
+  else label = '전체 기간';
+  $('dayLabel').textContent = label;
+  $('dayPrev').disabled = !(f && t);
+  $('dayNext').disabled = !(f && t) || t >= today;
+}
+let slide = '';
+function shiftDays(dir) { // dir: -1 이전, +1 다음 (선택한 기간 길이만큼 이동, 오늘 이후로는 가지 않음)
+  if (!state.from || !state.to) return;
+  const span = spanDays(), today = todayStr();
+  let f = addDays(state.from, dir * span), t = addDays(state.to, dir * span);
+  if (dir > 0 && f > today) return;
+  if (t > today) { t = today; f = addDays(today, -(span - 1)); }
+  Object.assign(state, { from: f, to: t, range: '', page: 1 });
+  slide = dir > 0 ? 'slideNext' : 'slidePrev';
+  load();
+}
+function pickDay(day) {
+  if (!day) return;
+  Object.assign(state, { from: day, to: day, range: '', page: 1 });
+  load();
+}
+if (COMPACT) {
+  $('dayPrev').onclick = () => shiftDays(-1);
+  $('dayNext').onclick = () => shiftDays(1);
+  $('dayToday').onclick = () => { slide = 'slideNext'; setRange('today'); };
+  $('filterToggle').onclick = () => document.body.classList.toggle('showfilters');
+  $('dayLabel').onclick = () => {
+    const inp = $('dayPick'); inp.value = state.from || todayStr(); inp.max = todayStr();
+    try { inp.showPicker(); } catch { inp.focus(); inp.click(); }
+  };
+  $('dayPick').onchange = () => pickDay($('dayPick').value);
+  // 좌우 스와이프: 오른쪽으로 밀면 이전 날, 왼쪽으로 밀면 다음 날
+  let sx = 0, sy = 0, st = 0, tracking = false;
+  const area = document.querySelector('main');
+  area.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1 || e.target.closest('input,select,textarea,.filters')) { tracking = false; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now(); tracking = true;
+  }, { passive: true });
+  area.addEventListener('touchend', (e) => {
+    if (!tracking) return; tracking = false;
+    const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Date.now() - st > 700 || Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.6) return; // 짧고 가로로 확실한 동작만
+    shiftDays(dx > 0 ? -1 : 1);
+  }, { passive: true });
+}
+
 function beep() {
   try {
     const c = new (window.AudioContext || window.webkitAudioContext)();
@@ -546,7 +622,7 @@ function syncControls() {
 }
 function sumCaption() {
   const fld = state.datefield === 'order' ? '주문일자 ' : state.datefield === 'all' ? '전체(주문·결제) ' : '';
-  const base = fld + (state.range ? RANGE_LABEL[state.range] : (state.from || state.to ? `${state.from || '처음'} ~ ${state.to || '현재'}` : '전체'));
+  const base = fld + (state.range ? RANGE_LABEL[state.range] : (state.from && state.from === state.to ? state.from : state.from || state.to ? `${state.from || '처음'} ~ ${state.to || '현재'}` : '전체'));
   return base + (state.q ? ` · "${state.q}"` : '') + ' 기준 합계';
 }
 async function load() {
@@ -590,6 +666,8 @@ async function load() {
   $('next').disabled = data.page >= data.pages;
   highlightId = null;
   syncControls();
+  updateDayNav();
+  if (slide) { const l = $('list'); l.classList.remove('slideNext', 'slidePrev'); void l.offsetWidth; l.classList.add(slide); slide = ''; }
   loadChart();
   if (!es) connect();
 }
