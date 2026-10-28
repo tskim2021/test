@@ -29,7 +29,7 @@
   input[type=search] { flex:1; min-width:140px; }
   .list { padding:0; overflow:hidden; }
   ul { list-style:none; margin:0; padding:0; }
-  li { display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); }
+  li { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line); }
   li:last-child { border-bottom:0; }
   li.new { animation:flash 2.5s ease-out; }
   @keyframes flash { from { background:color-mix(in srgb, var(--accent) 25%, transparent); } to { background:transparent; } }
@@ -66,9 +66,12 @@
   .toolbar label { display:flex; align-items:center; gap:8px; font-size:14px; color:var(--muted); }
   .btn.danger { border-color:#c0392b; color:#c0392b; }
   .btn:disabled { opacity:.4; cursor:default; }
-  .memo { font-size:12px; margin-top:3px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
-  .memotext { color:#b36b00; overflow-wrap:anywhere; }
-  .memo input { flex:1; min-width:150px; padding:4px 8px; font-size:13px; }
+  /* 메모는 입금 행 아래의 전체 너비 한 줄(체크박스 폭만큼 들여쓰기) */
+  .memo { flex:0 0 100%; box-sizing:border-box; padding:7px 0 0 30px; font-size:14px; display:flex; gap:8px; align-items:baseline; }
+  .memo[hidden] { display:none; }
+  .memo input { flex:1; min-width:0; }
+  .memotext { color:#b36b00; font-weight:600; overflow-wrap:anywhere; }
+  .memo input { padding:5px 8px; font-size:14px; }
   .link { background:none; border:0; color:var(--muted); font-size:12px; cursor:pointer; text-decoration:underline; padding:0; }
   .memobox textarea { width:100%; min-height:64px; font:inherit; font-size:14px; color:var(--text); background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; resize:vertical; }
   .memobox .actions { margin-top:6px; }
@@ -222,16 +225,23 @@ const kstText = (s) => (s ? s.slice(5, 16).replace('-', '.') : '');
 function fmtTime(iso) {
   return new Date(iso).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul', month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
 }
-// 리스트에서 바로 메모(처리 사유)를 보고 고치는 줄
-function memoLine(d) {
-  const box = document.createElement('div'); box.className = 'memo';
+// 리스트에서 바로 메모(처리 사유)를 보고 고치는 부분.
+//  link: 메모가 없을 때만 보이는 '메모' 링크(행 높이를 늘리지 않으려고 왼쪽 블록 안에 둔다)
+//  row : 메모가 있거나 입력 중일 때만 보이는, 행 아래 전체 너비 한 줄
+function memoParts(d) {
+  const row = document.createElement('div'); row.className = 'memo';
+  const link = document.createElement('button'); link.className = 'link'; link.textContent = '메모';
   const show = () => {
-    box.replaceChildren();
-    if (d.memo) { const t = document.createElement('span'); t.className = 'memotext'; t.textContent = '📝 ' + d.memo; box.append(t); }
-    const b = document.createElement('button'); b.className = 'link'; b.textContent = d.memo ? '수정' : '메모'; b.onclick = edit; box.append(b);
+    row.replaceChildren();
+    link.hidden = !!d.memo;
+    row.hidden = !d.memo;
+    if (!d.memo) return;
+    const t = document.createElement('span'); t.className = 'memotext'; t.textContent = '📝 ' + d.memo;
+    const b = document.createElement('button'); b.className = 'link'; b.textContent = '수정'; b.onclick = edit;
+    row.append(t, b);
   };
   const edit = () => {
-    box.replaceChildren();
+    link.hidden = true; row.hidden = false; row.replaceChildren();
     const inp = document.createElement('input'); inp.type = 'text'; inp.maxLength = 500; inp.value = d.memo || ''; inp.placeholder = '메모 / 처리 사유';
     const save = document.createElement('button'); save.className = 'btn'; save.textContent = '저장';
     const cancel = document.createElement('button'); cancel.className = 'link'; cancel.textContent = '취소'; cancel.onclick = show;
@@ -242,10 +252,11 @@ function memoLine(d) {
       d.memo = (await r.json()).memo; show();
     };
     inp.onkeydown = (e) => { if (e.key === 'Enter') save.click(); if (e.key === 'Escape') show(); };
-    box.append(inp, save, cancel); inp.focus();
+    row.append(inp, save, cancel); inp.focus();
   };
+  link.onclick = edit;
   show();
-  return box;
+  return { link, row };
 }
 function renderRow(d) {
   const li = document.createElement('li');
@@ -263,7 +274,8 @@ function renderRow(d) {
     info.textContent = `주문 ${d.order_id}${items ? ' · ' + items : ''}`;
     left.append(info);
   }
-  if (adminEnabled) left.append(memoLine(d));
+  const mp = adminEnabled ? memoParts(d) : null;
+  if (mp) left.append(mp.link);
   const amt = document.createElement('div'); amt.className = 'amt'; amt.textContent = '+' + won(d.amount);
   const right = document.createElement('div'); right.className = 'right';
   // 오른쪽 끝부터 [뱃지] [금액(고정 너비)] [버튼 칸(고정 너비)] 순서로 정렬해 모든 행의 위치를 맞춘다.
@@ -281,6 +293,7 @@ function renderRow(d) {
   if (shopEnabled) right.append(slot);
   lhs.append(cb, left);
   li.append(lhs, right);
+  if (mp) li.append(mp.row);
   return li;
 }
 function beep() {
