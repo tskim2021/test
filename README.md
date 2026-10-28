@@ -61,3 +61,29 @@ npm test
 실제 알림 문구가 `parser.js` 예상 형식과 다르면 금액·입금자가 인식되지 않습니다.
 실제 알림 문구(계좌번호와 이름은 가리고)를 `test/parser.test.js`에 추가하고 `parser.js`를 맞추세요.
 같은 알림이 같은 분에 여러 번 와도 한 번만 저장됩니다.
+
+## 쇼핑몰(그누보드5) 주문 연동
+
+입금 내역 옆의 **주문 확인** 버튼으로, 입금자명과 금액이 모두 일치하는 미입금 주문(`g5_shop_order`)과
+그 장바구니 상품(`g5_shop_cart`)을 보여 주고, 관리자가 **주문완료(입금 처리)** 를 누르면 DB에 반영합니다.
+
+설정(서버의 `/etc/deposit.env`, 비밀번호는 저장소/채팅에 올리지 마세요):
+
+```
+ADMIN_TOKEN=...            # install.sh 가 자동 생성. 주문 조회/처리 권한
+SHOP_DB_HOST=127.0.0.1     # 그누보드 data/dbconfig.php 의 G5_MYSQL_* 값
+SHOP_DB_PORT=3306
+SHOP_DB_USER=...
+SHOP_DB_PASSWORD=...
+SHOP_DB_NAME=...
+SHOP_TABLE_PREFIX=g5_
+```
+설정 후 `sudo systemctl restart deposit`. `SHOP_DB_NAME` 또는 `ADMIN_TOKEN` 이 없으면 이 기능은 꺼져 있습니다.
+
+- **매칭 기준**: `od_status='주문'` 이고 `od_misu`(미수금) = 입금액, 입금자명(`od_deposit_name`, 비어 있으면 `od_name`) = 입금자(공백 무시)
+- **처리 내용**(그누보드 관리자의 입금 처리와 같은 결과): `od_status='입금'`, `od_receipt_price += 입금액`, `od_misu -= 입금액`,
+  `od_receipt_time=NOW()`, 해당 주문의 장바구니 `ct_status='입금'` (한 트랜잭션)
+- 후보에 없는 주문은 처리할 수 없고, 한 입금은 한 주문에만, 한 주문은 한 입금에만 연결됩니다.
+- **주의**: SQL로 직접 바꾸므로 그누보드 관리자 화면의 부가 동작(재고·포인트·SMS·메일 등)은 실행되지 않습니다.
+  운영 DB에 적용하기 전에 백업하고, 소액 주문으로 먼저 확인하세요.
+- 쇼핑몰 DB 계정은 `g5_shop_order`, `g5_shop_cart` 에 SELECT/UPDATE 권한만 주는 것을 권장합니다.

@@ -21,7 +21,18 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
   const insert = db.prepare(
     'INSERT OR IGNORE INTO deposits (dedupe_key, amount, sender, balance, raw, received_at) VALUES (?,?,?,?,?,?)'
   );
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS matches (
+      deposit_id INTEGER PRIMARY KEY,
+      od_id TEXT NOT NULL UNIQUE,
+      confirmed_at TEXT NOT NULL
+    )
+  `);
   const byId = db.prepare('SELECT * FROM deposits WHERE dedupe_key = ?');
+  const getOne = db.prepare('SELECT * FROM deposits WHERE id = ?');
+  const claimStmt = db.prepare('INSERT OR IGNORE INTO matches (deposit_id, od_id, confirmed_at) VALUES (?,?,?)');
+  const releaseStmt = db.prepare('DELETE FROM matches WHERE deposit_id = ?');
+  const matchOf = db.prepare('SELECT od_id FROM matches WHERE deposit_id = ?');
 
   return {
     // 같은 알림이 같은 분에 중복 전송돼도 한 번만 저장한다. 새로 저장됐으면 row, 중복이면 null.
@@ -31,6 +42,11 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       const r = insert.run(key, amount, sender, balance, raw, iso);
       return r.changes ? byId.get(key) : null;
     },
+    get: (id) => getOne.get(id),
+    // 입금 1건을 주문 1건에 연결한다. 이미 연결됐거나 그 주문이 다른 입금과 연결돼 있으면 false.
+    claim: (depositId, odId) => claimStmt.run(depositId, String(odId), new Date().toISOString()).changes === 1,
+    release: (depositId) => releaseStmt.run(depositId),
+    matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
     // from/to: 'YYYY-MM-DD'(한국시간 기준, 양 끝 포함), q: 입금자 부분일치. 조건에 맞는 건수/합계도 함께 돌려준다.
     search({ from, to, q, limit = 20, offset = 0 } = {}) {
       const where = [];
@@ -40,7 +56,7 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       if (q) { where.push("sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
       const w = where.length ? `WHERE ${where.join(' AND ')}` : '';
       const agg = db.prepare(`SELECT COUNT(*) AS count, COALESCE(SUM(amount),0) AS total FROM deposits ${w}`).get(...args);
-      const rows = db.prepare(`SELECT * FROM deposits ${w} ORDER BY received_at DESC, id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
+      const rows = db.prepare(`SELECT d.*, m.od_id AS order_id FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id ${w} ORDER BY received_at DESC, d.id DESC LIMIT ? OFFSET ?`).all(...args, limit, offset);
       return { rows, count: agg.count, total: agg.total };
     },
   };

@@ -3,11 +3,13 @@ import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { openDb, isDate } from './db.js';
 import { parseNotification } from './parser.js';
+import { createShop } from './shop.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const API_TOKEN = process.env.API_TOKEN; // 폰 -> 서버 전송용
 const VIEW_TOKEN = process.env.VIEW_TOKEN || API_TOKEN; // 대시보드 열람용
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN; // 주문 확인/입금 처리 권한(없으면 해당 기능 비활성)
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
@@ -17,6 +19,8 @@ if (!API_TOKEN) {
 }
 
 const db = openDb();
+const shop = await createShop();
+const isAdmin = (req, url) => !!ADMIN_TOKEN && safeEq(tokenOf(req, url), ADMIN_TOKEN);
 const clients = new Set();
 
 const safeEq = (a = '', b = '') => {
@@ -92,7 +96,40 @@ const server = http.createServer(async (req, res) => {
       const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
       const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
-      return json(res, 200, { deposits: rows, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)) });
+      return json(res, 200, { deposits: rows, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN });
+    }
+
+    // 입금 1건에 대한 주문 후보(입금자명+금액 일치)와 장바구니 상품 조회 — 관리자 전용
+    let m;
+    if (req.method === 'GET' && (m = url.pathname.match(/^\/api\/deposits\/(\d+)\/matches$/))) {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      if (!shop) return json(res, 503, { error: '쇼핑몰 DB가 설정되지 않았습니다' });
+      const deposit = db.get(Number(m[1]));
+      if (!deposit) return json(res, 404, { error: 'not found' });
+      const confirmed = db.matchedOrder(deposit.id);
+      const candidates = confirmed ? [] : await shop.candidatesFor({ sender: deposit.sender, amount: deposit.amount });
+      return json(res, 200, { deposit: { id: deposit.id, sender: deposit.sender, amount: deposit.amount, received_at: deposit.received_at }, confirmed_order: confirmed, candidates });
+    }
+
+    // 관리자 '주문완료' — 후보 목록에 있는 주문만 입금 처리한다
+    if (req.method === 'POST' && (m = url.pathname.match(/^\/api\/deposits\/(\d+)\/confirm$/))) {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      if (!shop) return json(res, 503, { error: '쇼핑몰 DB가 설정되지 않았습니다' });
+      const deposit = db.get(Number(m[1]));
+      if (!deposit) return json(res, 404, { error: 'not found' });
+      let odId;
+      try { odId = String(JSON.parse(await readBody(req)).od_id || ''); } catch { odId = ''; }
+      if (!/^\d+$/.test(odId)) return json(res, 400, { error: 'od_id 필요' });
+      const candidates = await shop.candidatesFor({ sender: deposit.sender, amount: deposit.amount });
+      if (!candidates.some((c) => c.od_id === odId)) return json(res, 409, { error: '입금자명·금액이 일치하는 미입금 주문이 아닙니다' });
+      if (!db.claim(deposit.id, odId)) return json(res, 409, { error: '이미 처리된 입금이거나 이미 연결된 주문입니다' });
+      try {
+        await shop.confirm(odId, deposit.amount);
+      } catch (e) {
+        db.release(deposit.id);
+        return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
+      }
+      return json(res, 200, { ok: true, od_id: odId });
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {

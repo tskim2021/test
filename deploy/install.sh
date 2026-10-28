@@ -23,6 +23,9 @@ if [ "$need_node" = 1 ]; then
 fi
 echo "==> node $(node -v)"
 
+echo "==> 의존성 설치 (mysql2)"
+(cd "$APP_DIR" && npm install --omit=dev --no-audit --no-fund)
+
 # 2) 포트 충돌 확인(이미 이 서비스가 쓰는 경우는 통과)
 if ss -ltn "( sport = :$PORT )" | grep -q LISTEN && ! systemctl is-active --quiet deposit; then
   echo "!! 포트 $PORT 가 이미 사용 중입니다. PORT=다른번호 로 다시 실행하세요." >&2
@@ -33,6 +36,22 @@ fi
 if [ ! -f "$ENV_FILE" ]; then
   echo "API_TOKEN=$(openssl rand -hex 24)" | sudo tee "$ENV_FILE" >/dev/null
   sudo chmod 600 "$ENV_FILE"
+fi
+# 관리자 토큰(주문 확인/입금 처리 권한). 이미 있으면 유지
+if ! sudo grep -q '^ADMIN_TOKEN=' "$ENV_FILE"; then
+  echo "ADMIN_TOKEN=$(openssl rand -hex 24)" | sudo tee -a "$ENV_FILE" >/dev/null
+fi
+# 쇼핑몰(그누보드) DB 연동 설정 안내: 처음 한 번만 주석으로 추가
+if ! sudo grep -q 'SHOP_DB_NAME' "$ENV_FILE"; then
+  sudo tee -a "$ENV_FILE" >/dev/null <<'ENVHINT'
+# --- 쇼핑몰 DB 연동 (그누보드 data/dbconfig.php 의 값과 동일). 채운 뒤: sudo systemctl restart deposit
+#SHOP_DB_HOST=127.0.0.1
+#SHOP_DB_PORT=3306
+#SHOP_DB_USER=
+#SHOP_DB_PASSWORD=
+#SHOP_DB_NAME=
+#SHOP_TABLE_PREFIX=g5_
+ENVHINT
 fi
 sudo sed -i '/^PORT=/d;/^HOST=/d' "$ENV_FILE"
 printf 'PORT=%s\nHOST=%s\n' "$PORT" "$HOST" | sudo tee -a "$ENV_FILE" >/dev/null
@@ -63,6 +82,7 @@ sleep 1
 
 # 5) 동작 확인
 TOKEN="$(sudo grep '^API_TOKEN=' "$ENV_FILE" | cut -d= -f2)"
+ADMIN="$(sudo grep '^ADMIN_TOKEN=' "$ENV_FILE" | cut -d= -f2)"
 if curl -fsS -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$PORT/api/ping" >/dev/null; then
   echo "==> 서버 정상 동작 확인 ✅"
 else
@@ -75,6 +95,8 @@ cat <<MSG
 
 ================ 설치 완료 ================
 API 토큰 : $TOKEN      (앱과 대시보드 로그인에 사용, 안전한 곳에 보관)
+관리자 토큰: $ADMIN      (대시보드에서 '주문 확인/주문완료' 할 때 입력)
+쇼핑몰 연동: sudo nano $ENV_FILE 에서 SHOP_DB_* 를 채우고 sudo systemctl restart deposit
 로컬 주소: http://127.0.0.1:$PORT
 
 [외부 접속 설정]
