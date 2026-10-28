@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>실시간 입금 내역</title>
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1c2128; --muted:#6b7480; --accent:#1f9d55; --line:#e6e8ec; --chip:#eef0f3; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12151a; --card:#1b1f26; --text:#e8eaed; --muted:#8b949e; --accent:#3ddc84; --line:#2a2f38; --chip:#262b34; } }
+  :root { --rate:#1f6feb; --bg:#f6f7f9; --card:#fff; --text:#1c2128; --muted:#6b7480; --accent:#1f9d55; --line:#e6e8ec; --chip:#eef0f3; }
+  @media (prefers-color-scheme: dark) { :root { --rate:#79b8ff; --bg:#12151a; --card:#1b1f26; --text:#e8eaed; --muted:#8b949e; --accent:#3ddc84; --line:#2a2f38; --chip:#262b34; } }
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
   main { max-width:720px; margin:0 auto; padding:20px 16px 48px; }
@@ -18,7 +18,7 @@
   .summary { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
   .card .label { font-size:13px; color:var(--muted); }
-  .card .value { font-size:22px; font-weight:700; margin-top:2px; }
+  .card .value { font-size:26px; font-weight:700; margin-top:2px; }
   .filters { margin-bottom:16px; }
   .chips { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px; }
   .chip { border:1px solid var(--line); background:var(--chip); color:var(--text); border-radius:999px; padding:6px 14px; font-size:14px; cursor:pointer; }
@@ -34,14 +34,14 @@
   li.new { animation:flash 2.5s ease-out; }
   @keyframes flash { from { background:color-mix(in srgb, var(--accent) 25%, transparent); } to { background:transparent; } }
   .who { font-weight:600; } .when { font-size:13px; color:var(--muted); }
-  .amt { color:var(--accent); font-weight:700; font-size:18px; }
+  .amt { color:var(--accent); font-weight:700; font-size:21px; }
   .empty { padding:32px; text-align:center; color:var(--muted); }
   .pager { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:16px; font-size:14px; color:var(--muted); }
   .pager button { border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:8px 16px; font-size:14px; cursor:pointer; }
   .pager button:disabled { opacity:.4; cursor:default; }
   .right { display:flex; align-items:center; gap:12px; }
   .btn { border:1px solid var(--accent); color:var(--accent); background:transparent; border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; white-space:nowrap; }
-  .amtcol { min-width:104px; text-align:right; }
+  .amtcol { min-width:124px; text-align:right; }
   .slot { width:84px; display:flex; justify-content:flex-end; }
   .slot .btn { width:100%; }
   @media (max-width:560px) {
@@ -82,21 +82,31 @@
            border-radius:14px 0 0 14px; box-shadow:-8px 0 24px rgba(0,0,0,.18); transform:translateX(100%); transition:transform .25s ease; }
   #modal.open .sheet { transform:none; }
   .ordinfo { font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4; overflow-wrap:anywhere; }
-  .sheet h2 { font-size:17px; margin:0 0 4px; }
+  .sheet h2 { font-size:21px; margin:0 0 4px; }
   .sheet .sub { color:var(--muted); font-size:13px; margin-bottom:12px; }
   .order { border:1px solid var(--line); border-radius:10px; padding:12px; margin-top:10px; }
   .item { align-items:flex-start; padding:8px 0; }
   .item .pic { width:56px; height:56px; object-fit:cover; border-radius:8px; background:var(--chip); flex:none; }
   .item .info { flex:1; min-width:0; overflow-wrap:anywhere; }
-  .item .info .pricing { font-size:12px; color:var(--muted); margin-top:2px; }
-  .item .money { text-align:right; white-space:nowrap; }
-  .item .money small { display:block; font-size:12px; color:var(--muted); }
+  .item .info .pricing { font-size:15px; font-weight:600; color:var(--muted); margin-top:2px; }
+  .item .money { text-align:right; white-space:nowrap; font-size:20px; font-weight:800; }
+  .item .money small { display:block; font-size:15px; font-weight:600; color:var(--muted); }
   a.btn { text-decoration:none; display:inline-block; margin-top:6px; font-size:12px; padding:4px 10px; }
   .calc { font-size:12px; line-height:1.6; color:var(--muted); margin:2px 0 6px; }
   .calc b { color:var(--text); }
   .calc .ok { color:var(--accent); font-weight:700; }
   .calc .bad { color:#c0392b; font-weight:700; }
-  .ratebar { font-size:12px; color:var(--muted); background:var(--chip); border-radius:8px; padding:6px 10px; margin-top:8px; }
+  .ratebig { font-size:28px; font-weight:800; color:var(--rate); line-height:1.25; }
+  .ratebig small { font-size:16px; font-weight:700; }
+  .ratenum { color:var(--rate); }
+  .ratesrc { font-size:12px; color:var(--muted); margin-top:2px; }
+  .bigcalc { background:var(--chip); border-radius:10px; padding:10px 12px; margin:8px 0; }
+  .bigcalc .l1 { font-size:21px; font-weight:800; }
+  .bigcalc .l2 { font-size:24px; font-weight:800; margin-top:2px; }
+  .bigcalc .l3 { font-size:17px; font-weight:600; margin-top:4px; }
+  .bigcalc .l4 { font-size:13px; color:var(--muted); margin-top:2px; }
+  .ratebar { font-size:12px; color:var(--muted); background:color-mix(in srgb, var(--rate) 12%, transparent); border-left:4px solid var(--rate); border-radius:8px; padding:8px 12px; margin-top:8px; }
+  .order .head span:last-child { font-size:26px; font-weight:800; }
   .order .head { display:flex; justify-content:space-between; gap:8px; font-weight:600; }
   .order .meta { color:var(--muted); font-size:13px; margin:2px 0 8px; }
   .item { display:flex; justify-content:space-between; gap:8px; font-size:14px; padding:3px 0; border-top:1px dashed var(--line); }
@@ -406,9 +416,15 @@ async function openMatch(d) {
   const rate = usdMode && data.rate ? data.rate.rate : null;
   const usd = (n) => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 3 });
   if (usdMode) {
-    sheet.insertBefore(el('div', 'ratebar', rate
-      ? `적용 환율 ${rate.toLocaleString('ko-KR')}원/$ (${data.rate.source}) · 입금 예정액은 100원 단위 올림`
-      : '환율을 찾지 못해 달러 금액만 표시합니다 (서버 설정 SHOP_USD_KRW 로 지정 가능)'), memoBox);
+    const bar = el('div', 'ratebar');
+    if (rate) {
+      const big = el('div', 'ratebig'); big.append('적용 환율 ', `${rate.toLocaleString('ko-KR')}원`, el('small', '', ' / $1'));
+      bar.append(big,
+        el('div', 'ratesrc', `출처: ${data.rate.source} · 입금 예정액은 100원 단위 올림`));
+    } else {
+      bar.append(el('div', '', '환율을 찾지 못해 달러 금액만 표시합니다 (서버 설정 SHOP_USD_KRW 로 지정 가능)'));
+    }
+    sheet.insertBefore(bar, memoBox);
   }
   const diffText = (krw) => {
     const diff = d.amount - krw;
@@ -426,9 +442,14 @@ async function openMatch(d) {
       head.append(el('span', '', `주문 ${o.od_id}`), el('span', '', usdMode ? usd(pending ? o.od_misu : o.od_total) : won(pending ? o.od_misu : o.od_total)));
       card.append(head, el('div', 'meta', `주문자 ${o.od_name} · 입금자 ${o.od_deposit_name || '(없음)'} · ${kstText(o.od_time)} · 상태 ${o.od_status}`));
       if (usdMode && rate) {
-        const calc = el('div', 'calc');
-        calc.append('미수금 ', el('b', '', usd(o.od_misu)), ` → 입금 예정 `, el('b', '', won(o.od_misu_krw)), ` · 입금 ${won(d.amount)} `, diffText(o.od_misu_krw));
-        calc.append(document.createElement('br'), `상품+배송 ${usd(o.od_total)} (≈${won(o.od_total_krw)})`);
+        const num1 = (n) => Number(n).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+        const calc = el('div', 'bigcalc');
+        const l1 = el('div', 'l1'); l1.append(`${usd(o.od_misu)} × `, el('span', 'ratenum', `${rate.toLocaleString('ko-KR')}원`), ` = ${num1(o.od_misu * rate)}원`);
+        calc.append(l1,
+          el('div', 'l2', `→ 100원 단위 올림  ${won(o.od_misu_krw)}`));
+        const l3 = el('div', 'l3'); l3.append(`입금 ${won(d.amount)} · `, diffText(o.od_misu_krw));
+        calc.append(l3);
+        if (o.od_misu > 0) calc.append(el('div', 'l4', `입금액 ÷ 미수금 = ${num1(d.amount / o.od_misu)}원/$ (역산 환율) · 상품+배송 ${usd(o.od_total)} (≈${won(o.od_total_krw)})`));
         card.append(calc);
       } else if (!usdMode && kind === 'name') {
         card.append(el('div', 'diff', `금액 다름: 주문 미수금 ${won(o.od_misu)} / 상품+배송 ${won(o.od_total)} ↔ 입금 ${won(d.amount)}`));

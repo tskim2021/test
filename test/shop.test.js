@@ -120,26 +120,38 @@ test('달러 주문 판정: 환산 금액이 입금액과 맞으면 full', () =>
   assert.deepEqual([...ids].sort(), [1, 2]);
 });
 
-test('환율 찾기: 설정 > 쇼핑몰 DB > 쇼핑몰 사이트, 원화 쇼핑몰은 환산 안 함', async () => {
-  const mk = (rows, extra = {}) => ({
-    query: async (sql) => {
-      if (sql.includes('information_schema')) return [rows.cols || []];
+test('환율 찾기: 설정 > 쇼핑몰 사이트 > 쇼핑몰 DB(로그/이전값 제외), 원화 쇼핑몰은 환산 안 함', async () => {
+  const mk = (rows) => ({
+    query: async (sql, args) => {
+      if (sql.includes('information_schema')) { // 로그/이전값 제외 조건이 SQL 에 들어 있어야 한다
+        assert.match(sql, /NOT REGEXP 'log\|hist/);
+        assert.match(sql, /column_name NOT REGEXP 'old\|prev/);
+        return [rows.cols || []];
+      }
       if (sql.includes('FROM `g5_shop_default`')) return [[{ v: rows.v }]];
       if (sql.includes('g5_shop_item')) return [[{ it_id: 'X1' }]];
       throw new Error('unexpected ' + sql);
-    }, ...extra,
+    },
   });
-  const dbRate = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_exchange_rate' }], v: '1329.0000' }), 'g5_', { currency: 'USD' }).getRate();
-  assert.deepEqual([dbRate.rate, dbRate.source.includes('g5_shop_default.de_exchange_rate')], [1329, true]);
-  const bad = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_tax_rate' }], v: '10' }), 'g5_', { currency: 'USD', shopUrl: 'http://x.invalid' }).getRate();
-  assert.equal(bad, null); // 범위(500~3000) 밖 값은 환율로 보지 않고, 사이트 조회도 실패하면 null
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => ({ text: async () => '<input type="hidden" id="exchange_rate" value="1329.0000">' });
+  const site = (v) => { globalThis.fetch = async () => ({ text: async () => `<input type="hidden" id="exchange_rate" value="${v}">` }); };
+  const down = () => { globalThis.fetch = async () => { throw new Error('offline'); }; };
   try {
-    const site = await shopFromPool(mk({ cols: [] }), 'g5_', { currency: 'USD' }).getRate();
-    assert.deepEqual([site.rate, site.source], [1329, '쇼핑몰 사이트 환율']);
+    // 사이트(고객이 보는 환율)가 DB 보다 우선
+    site('1329.0000');
+    const both = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_exchange_rate' }], v: '1343' }), 'g5_', { currency: 'USD' }).getRate();
+    assert.deepEqual([both.rate, both.source], [1329, '쇼핑몰 사이트 환율']);
+    // 사이트가 안 되면 DB
+    down();
+    const dbRate = await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_exchange_rate' }], v: '1329.0000' }), 'g5_', { currency: 'USD' }).getRate();
+    assert.deepEqual([dbRate.rate, dbRate.source.includes('g5_shop_default.de_exchange_rate')], [1329, true]);
+    // 범위(500~3000) 밖 값은 환율이 아님
+    assert.equal(await shopFromPool(mk({ cols: [{ t: 'g5_shop_default', c: 'de_tax_rate' }], v: '10' }), 'g5_', { currency: 'USD' }).getRate(), null);
+    // 사이트가 이상한 값을 주면 무시
+    site('12');
+    assert.equal(await shopFromPool(mk({ cols: [] }), 'g5_', { currency: 'USD' }).getRate(), null);
   } finally { globalThis.fetch = origFetch; }
-  assert.equal((await shopFromPool(mk({}), 'g5_', { currency: 'USD', usdKrw: '1400' }).getRate()).rate, 1400);
+  assert.equal((await shopFromPool(mk({}), 'g5_', { currency: 'USD', usdKrw: '1400' }).getRate()).rate, 1400); // 설정이 최우선
   assert.equal(await shopFromPool(mk({}), 'g5_', { currency: 'KRW' }).getRate(), null);
 });
 
@@ -156,6 +168,9 @@ test('DB(USD): 환산 일치, 이미지·상품 링크·원화 표기', { skip }
   assert.equal(it.image, 'https://shop.test/data/item/IT10/a.jpg');
   assert.equal(it.url, 'https://shop.test/shop/item.php?it_id=IT10');
   assert.deepEqual([it.price, it.price_krw, it.subtotal_krw], [22, 29238, 29238]); // 쇼핑몰 상품 페이지처럼 내림
+  // 문태원: $39.5 × 1329 = 52,495.5 -> 52,500 (실제 사례)
+  assert.equal(krwOf(39.5, 1329), 52500);
+  assert.equal(krwOf(39.5, 1343), 53100); // 잘못된(이전) 환율이면 600원 차이
   const noImg = (await shop.relatedFor({ sender: '곽도빈', amount: 26400 })).full[0].items;
   assert.ok(noImg.every((x) => typeof x.image === 'string'));
 });

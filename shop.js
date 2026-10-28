@@ -3,7 +3,7 @@
 //
 // 이 쇼핑몰은 상품·주문 금액이 달러(USD)이고, 고객은 원화로 입금한다. 입금 요청액은
 //   원화 = ceil( USD 금액 × 환율 / 100 ) × 100   (100원 단위 올림)
-// 이다. 환율은 SHOP_USD_KRW 설정 → 쇼핑몰 DB → 쇼핑몰 사이트(상품 페이지의 exchange_rate) 순서로 찾는다.
+// 이다. 환율은 SHOP_USD_KRW 설정 → 쇼핑몰 사이트(고객이 보는 상품 페이지의 exchange_rate) → 쇼핑몰 DB 순서로 찾는다.
 // 금액이 원화인 쇼핑몰이면 SHOP_CURRENCY=KRW 로 환산을 끈다.
 
 const httpErr = (status, message) => Object.assign(new Error(message), { status });
@@ -139,7 +139,10 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       `SELECT table_name AS t, column_name AS c FROM information_schema.columns
         WHERE table_schema = DATABASE() AND (column_name LIKE '%exchange%' OR column_name LIKE '%rate%')
           AND data_type IN ('decimal','float','double','int','bigint','varchar','char')
-          AND table_name NOT IN (?, ?) LIMIT 30`, [O, C]);
+          AND table_name NOT IN (?, ?)
+          AND table_name NOT REGEXP 'log|hist|bak|backup|old|tmp|temp'
+          AND column_name NOT REGEXP 'old|prev|before|bak|log'
+        LIMIT 30`, [O, C]);
     for (const { t, c } of cols) {
       if (!/^[A-Za-z0-9_]+$/.test(t) || !/^[A-Za-z0-9_]+$/.test(c)) continue;
       const [r] = await pool.query(`SELECT \`${c}\` AS v FROM \`${t}\` LIMIT 1`);
@@ -162,7 +165,7 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
     if (Date.now() - rateCache.at < 600_000) return rateCache.v;
     let v = null;
     if (usdKrw && Number(usdKrw) > 0) v = { rate: Number(usdKrw), source: '설정(SHOP_USD_KRW)' };
-    for (const f of [rateFromDb, rateFromSite]) {
+    for (const f of [rateFromSite, rateFromDb]) {
       if (v) break;
       try { v = await f(); } catch (e) { console.error('환율 조회 실패:', f.name, e.message); }
     }
