@@ -126,6 +126,11 @@
       <span><span id="selCount" class="status"></span> <button class="btn danger" id="hideBtn" disabled>선택 삭제</button></span>
     </div>
     <div class="row">
+      <select id="datefield" aria-label="일자 기준" hidden>
+        <option value="all">전체</option>
+        <option value="order">주문일자</option>
+        <option value="paid" selected>결제일자</option>
+      </select>
       <input type="date" id="from" aria-label="시작일자">
       <span class="sep">~</span>
       <input type="date" id="to" aria-label="종료일자">
@@ -161,7 +166,7 @@
 const $ = (id) => document.getElementById(id);
 const won = (n) => n.toLocaleString('ko-KR') + '원';
 let token = localStorage.getItem('viewToken') || '';
-const state = { from: '', to: '', q: '', limit: 20, page: 1, range: 'today' };
+const state = { from: '', to: '', q: '', limit: 20, page: 1, range: 'today', datefield: 'paid' };
 let es, highlightId = null, reqSeq = 0, shopEnabled = false, adminEnabled = false;
 const selected = new Set();
 const LEVEL_LABEL = { full: '이름·금액 일치', name: '이름만 일치', amount: '금액만 일치', other: '다른 상태 주문' };
@@ -263,11 +268,12 @@ function beep() {
 // ---- 조회 ----
 function syncControls() {
   $('from').value = state.from; $('to').value = state.to;
-  $('limit').value = String(state.limit); $('q').value = state.q;
+  $('limit').value = String(state.limit); $('q').value = state.q; $('datefield').value = state.datefield;
   document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.range === state.range));
 }
 function sumLabel() {
-  const base = state.range ? RANGE_LABEL[state.range] : (state.from || state.to ? `${state.from || '처음'} ~ ${state.to || '현재'}` : '전체');
+  const fld = state.datefield === 'order' ? '주문일자 ' : state.datefield === 'all' ? '전체(주문·결제) ' : '';
+  const base = fld + (state.range ? RANGE_LABEL[state.range] : (state.from || state.to ? `${state.from || '처음'} ~ ${state.to || '현재'}` : '전체'));
   return base + (state.q ? ` · "${state.q}"` : '') + ' 입금 합계';
 }
 async function load() {
@@ -276,12 +282,14 @@ async function load() {
   if (state.from) p.set('from', state.from);
   if (state.to) p.set('to', state.to);
   if (state.q) p.set('q', state.q);
+  if (state.datefield !== 'paid') p.set('datefield', state.datefield);
   const r = await fetch('/api/deposits?' + p, { headers: { authorization: 'Bearer ' + token } });
   if (r.status === 401) { localStorage.removeItem('viewToken'); return showLogin(); }
   if (!r.ok || seq !== reqSeq) return;
   const data = await r.json();
   shopEnabled = !!data.shop;
   adminEnabled = !!data.admin;
+  $('datefield').hidden = !shopEnabled;
   $('matchErr').hidden = !data.match_error;
   if (data.match_error) $('matchErr').textContent = '주문 매칭 조회 실패: ' + data.match_error;
   $('legend').hidden = !shopEnabled;
@@ -444,6 +452,7 @@ document.querySelectorAll('.chip').forEach((c) => c.onclick = () => setRange(c.d
 for (const id of ['from', 'to']) {
   $(id).onchange = () => { state[id] = $(id).value; state.range = ''; state.page = 1; load(); };
 }
+$('datefield').onchange = () => { state.datefield = $('datefield').value; state.page = 1; load(); };
 $('limit').onchange = () => { state.limit = Number($('limit').value); state.page = 1; load(); };
 let qTimer;
 $('q').oninput = () => { clearTimeout(qTimer); qTimer = setTimeout(() => { state.q = $('q').value.trim(); state.page = 1; load(); }, 300); };

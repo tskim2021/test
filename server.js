@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { openDb, isDate } from './db.js';
 import { parseNotification } from './parser.js';
-import { createShop } from './shop.js';
+import { createShop, orderKeys, relatedDepositIds } from './shop.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -21,6 +21,20 @@ if (!API_TOKEN) {
 const db = openDb();
 const shop = await createShop();
 shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건`)).catch((e) => console.error('쇼핑몰 DB 연결 실패:', e.message));
+// 주문일자/전체 검색: 쇼핑몰 주문 시각이 기간에 드는 주문과 관계(이름·금액·연결)가 있는 입금을 모은다.
+// field='all' 이면 입금 시각이 기간에 드는 입금도 합친다.
+async function orderDateRows({ field, from, to, q }) {
+  const orders = await shop.ordersInRange(from, to);
+  const { names, amounts, odIds } = orderKeys(orders);
+  const cand = db.candidates({ q, names: [...names], amounts: [...amounts], odIds: [...odIds] });
+  const related = relatedDepositIds(orders, cand);
+  const rows = cand.filter((d) => related.has(d.id));
+  if (field === 'all') {
+    const have = new Set(rows.map((r) => r.id));
+    for (const d of db.all({ from, to, q })) if (!have.has(d.id)) rows.push(d);
+  }
+  return rows.sort((a, b) => b.received_at.localeCompare(a.received_at) || b.id - a.id);
+}
 const isAdmin = (req, url) => !!ADMIN_TOKEN && safeEq(tokenOf(req, url), ADMIN_TOKEN);
 const clients = new Set();
 
@@ -96,11 +110,22 @@ const server = http.createServer(async (req, res) => {
       const limit = [10, 20, 50, 100].includes(Number(url.searchParams.get('limit'))) ? Number(url.searchParams.get('limit')) : 20;
       const page = Math.max(1, Math.floor(Number(url.searchParams.get('page'))) || 1);
       const q = (url.searchParams.get('q') || '').trim().slice(0, 50);
-      const { rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit });
-      let levels = new Map();
+      // datefield: paid=결제일자(입금 받은 날, 기본), order=주문일자(쇼핑몰 주문 시각), all=전체(둘 중 하나라도)
+      const field = ['all', 'order', 'paid'].includes(url.searchParams.get('datefield')) ? url.searchParams.get('datefield') : 'paid';
+      let rows, count, total;
       let matchError = null;
+      if (field !== 'paid' && shop && ADMIN_TOKEN && (from || to)) {
+        try {
+          const all = await orderDateRows({ field, from, to, q });
+          count = all.length;
+          total = all.reduce((s2, r) => s2 + r.amount, 0);
+          rows = all.slice((page - 1) * limit, page * limit);
+        } catch (e) { matchError = '주문일자 조회 실패: ' + e.message; console.error(matchError); }
+      }
+      if (!rows) ({ rows, count, total } = db.search({ from, to, q, limit, offset: (page - 1) * limit }));
+      let levels = new Map();
       if (shop && ADMIN_TOKEN) {
-        try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = e.message; console.error('주문 매칭 조회 실패:', e.message); }
+        try { levels = await shop.matchLevels(rows.filter((r) => !r.order_id)); } catch (e) { matchError = '주문 매칭 조회 실패: ' + e.message; console.error(matchError); }
       }
       let orderItems = {};
       if (shop && ADMIN_TOKEN) {

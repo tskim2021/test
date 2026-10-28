@@ -46,6 +46,33 @@ export function classify(o, dep) {
   }
   return nameHit && amtHit ? 'other' : null;
 }
+// 주문 목록에서 입금 후보를 좁히는 키(이름, 미입금 주문의 금액, 주문번호)
+export function orderKeys(orders) {
+  const names = new Set(), amounts = new Set(), odIds = new Set();
+  for (const o of orders) {
+    odIds.add(String(o.od_id));
+    for (const n of [norm(o.od_deposit_name), norm(o.od_name)]) if (n) names.add(n);
+    if (o.od_status === '주문') for (const a of [num(o.od_misu), orderTotal(o), num(o.od_receipt_price)]) amounts.add(a);
+  }
+  return { names, amounts, odIds };
+}
+// 주문 목록과 관계가 있는 입금 id 집합. 처리(연결)된 입금은 연결된 주문이 목록에 있을 때만, 그 외는 이름/금액 관계로 판정한다.
+export function relatedDepositIds(orders, deposits) {
+  const byName = new Map(), byAmt = new Map(), ids = new Set();
+  const push = (m, k, o) => { if (!m.has(k)) m.set(k, []); m.get(k).push(o); };
+  for (const o of orders) {
+    ids.add(String(o.od_id));
+    for (const n of new Set([norm(o.od_deposit_name), norm(o.od_name)])) if (n) push(byName, n, o);
+    if (o.od_status === '주문') for (const a of new Set([num(o.od_misu), orderTotal(o), num(o.od_receipt_price)])) push(byAmt, a, o);
+  }
+  const out = new Set();
+  for (const d of deposits) {
+    if (d.order_id) { if (ids.has(String(d.order_id))) out.add(d.id); continue; }
+    const cands = [...(byName.get(norm(d.sender)) || []), ...(byAmt.get(d.amount) || [])];
+    if (cands.some((o) => classify(o, d))) out.add(d.id);
+  }
+  return out;
+}
 export const bestLevel = (levels) => levels.reduce((b, l) => (l && (!b || RANK[l] > RANK[b]) ? l : b), null);
 
 const COLS = `od_id, od_name, od_deposit_name, od_settle_case, od_status, od_misu, od_receipt_price,
@@ -87,6 +114,16 @@ export function shopFromPool(pool, prefix = 'g5_') {
       const out = {};
       for (const i of await itemsOf(odIds)) (out[String(i.od_id)] ||= []).push({ name: i.it_name, option: i.io_id || '', qty: num(i.ct_qty) });
       return out;
+    },
+    // 주문일자(쇼핑몰 주문 시각, 한국시간 문자열) 기간의 주문. from/to 는 'YYYY-MM-DD'.
+    async ordersInRange(from, to) {
+      const where = [];
+      const args = [];
+      if (from) { where.push('od_time >= ?'); args.push(`${from} 00:00:00`); }
+      if (to) { where.push('od_time <= ?'); args.push(`${to} 23:59:59`); }
+      const [rows] = await pool.query(
+        `SELECT ${COLS} FROM ${O} ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY od_time DESC LIMIT 20000`, args);
+      return rows;
     },
     // 입금 목록 -> Map(id -> 'full'|'other'|'name'|'amount').
     // 목록의 입금자·금액에 해당하는 최근 60일 주문만 골라 읽는다(주문이 아무리 많아도 누락되지 않게). 10초 캐시.

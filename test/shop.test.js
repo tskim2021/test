@@ -1,6 +1,6 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createShop, classify, bestLevel } from '../shop.js';
+import { createShop, classify, bestLevel, orderKeys, relatedDepositIds } from '../shop.js';
 
 // 실제 MySQL/MariaDB(그누보드 스키마)가 있을 때만 실행: SHOP_DB_NAME 등 환경변수를 설정하세요.
 const skip = !process.env.SHOP_DB_NAME && '쇼핑몰 테스트 DB 미설정';
@@ -69,4 +69,25 @@ test('DB: 문자 포함 주문번호, DECIMAL 금액은 숫자로, 시각은 DB 
     assert.equal(i.subtotal, i.price * i.qty);
   }
   assert.equal(o.items[0].subtotal, 80000);
+});
+
+test('주문일자 검색: 주문 목록과 관계있는 입금만 고른다(DB 불필요)', () => {
+  const orders = [
+    { od_id: 'A1', od_name: '이상덕', od_deposit_name: '', od_status: '주문', od_misu: 35900, od_receipt_price: 0, od_cart_price: 32900, od_send_cost: 3000, od_send_cost2: 0 },
+    { od_id: 'A2', od_name: '박서준', od_deposit_name: '박서준', od_status: '입금', od_misu: 0, od_receipt_price: 30000, od_cart_price: 30000, od_send_cost: 0, od_send_cost2: 0 },
+  ];
+  const k = orderKeys(orders);
+  assert.deepEqual([...k.names].sort(), ['박서준', '이상덕']);
+  assert.deepEqual([...k.amounts].sort((a, b) => a - b), [0, 0, 0, 32900 + 3000, 35900].sort((a, b) => a - b).filter((v, i, arr) => arr.indexOf(v) === i));
+  assert.deepEqual([...k.odIds].sort(), ['A1', 'A2']);
+  const deps = [
+    { id: 1, sender: '이상덕', amount: 35900, order_id: null },   // 이름+금액
+    { id: 2, sender: '이상덕', amount: 1, order_id: null },       // 이름만
+    { id: 3, sender: '홍길동', amount: 35900, order_id: null },   // 금액만(미입금 주문)
+    { id: 4, sender: '홍길동', amount: 7, order_id: null },       // 무관
+    { id: 5, sender: '박서준', amount: 30000, order_id: null },   // 이미 입금된 주문과 이름+금액
+    { id: 6, sender: '아무개', amount: 7, order_id: 'A1' },       // 연결된 주문이 목록에 있음
+    { id: 7, sender: '이상덕', amount: 35900, order_id: 'A9' },   // 다른 주문과 연결됨 -> 제외
+  ];
+  assert.deepEqual([...relatedDepositIds(orders, deps)].sort(), [1, 2, 3, 5, 6]);
 });

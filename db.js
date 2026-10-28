@@ -5,6 +5,8 @@ export const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date
 export const kstStart = (d) => new Date(`${d}T00:00:00+09:00`).toISOString();
 export const kstEnd = (d) => new Date(`${d}T23:59:59.999+09:00`).toISOString();
 
+const BASE = 'SELECT d.*, m.od_id AS order_id, m.manual AS order_manual FROM deposits d LEFT JOIN matches m ON m.deposit_id = d.id';
+
 export function openDb(path = process.env.DB_PATH || './deposits.db') {
   const db = new DatabaseSync(path);
   db.exec(`
@@ -65,6 +67,28 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     setMemo: (id, memo) => memoStmt.run(String(memo), id).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
+    // 주문일자 검색용: 이름/금액/연결 주문번호 중 하나라도 걸리는 입금(숨김 제외)을 전부 돌려준다(페이지 처리는 호출 쪽에서).
+    candidates({ q, names = [], amounts = [], odIds = [], limit = 5000 } = {}) {
+      const where = ['d.hidden = 0'];
+      const args = [];
+      // 인자는 SQL 의 ? 순서와 같아야 한다: q 조건이 먼저, 그 다음 json_each 세 개
+      if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
+      args.push(JSON.stringify(names), JSON.stringify(amounts), JSON.stringify(odIds));
+      return db.prepare(`${BASE} WHERE ${where.join(' AND ')}
+          AND ( REPLACE(d.sender, ' ', '') IN (SELECT value FROM json_each(?))
+             OR d.amount IN (SELECT value FROM json_each(?))
+             OR m.od_id IN (SELECT value FROM json_each(?)) )
+        ORDER BY d.received_at DESC, d.id DESC LIMIT ${Number(limit)}`).all(...args);
+    },
+    // 기간(입금 시각)에 해당하는 입금 전부(페이지 처리 없음)
+    all({ from, to, q, limit = 5000 } = {}) {
+      const where = ['d.hidden = 0'];
+      const args = [];
+      if (from) { where.push('d.received_at >= ?'); args.push(kstStart(from)); }
+      if (to) { where.push('d.received_at <= ?'); args.push(kstEnd(to)); }
+      if (q) { where.push("d.sender LIKE ? ESCAPE '\\'"); args.push(`%${q.replace(/[\\%_]/g, '\\$&')}%`); }
+      return db.prepare(`${BASE} WHERE ${where.join(' AND ')} ORDER BY d.received_at DESC, d.id DESC LIMIT ${Number(limit)}`).all(...args);
+    },
     // from/to: 'YYYY-MM-DD'(한국시간 기준, 양 끝 포함), q: 입금자 부분일치. 조건에 맞는 건수/합계도 함께 돌려준다.
     search({ from, to, q, limit = 20, offset = 0 } = {}) {
       const where = ['hidden = 0'];
