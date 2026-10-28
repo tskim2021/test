@@ -29,6 +29,29 @@ final class Store {
         p.edit().putString("url", u).putString("token", token.trim()).apply();
     }
 
+    // ---- 푸시 설정/진행 상태 ----
+    boolean pushEnabled() { return p.getBoolean("push", true); }
+    void setPushEnabled(boolean on) { p.edit().putBoolean("push", on).apply(); }
+    boolean baselineDone() { return p.getBoolean("baseline", false); }
+    long lastDepositId() { return p.getLong("last_deposit_id", 0); }
+    String lastProcessedAt() { return p.getString("last_processed_at", "1970-01-01T00:00:00.000Z"); }
+
+    synchronized void setBaseline(long depositId, String nowIso) {
+        p.edit().putBoolean("baseline", true).putLong("last_deposit_id", depositId)
+                .putString("last_processed_at", nowIso.isEmpty() ? lastProcessedAt() : nowIso).apply();
+    }
+    /** id 가 마지막으로 알린 것보다 크면 갱신하고 true(= 새로 알려야 함). */
+    synchronized boolean advanceDeposit(long id) {
+        if (id <= lastDepositId()) return false;
+        p.edit().putLong("last_deposit_id", id).apply();
+        return true;
+    }
+    synchronized boolean advanceProcessed(String atIso) {
+        if (atIso == null || atIso.isEmpty() || atIso.compareTo(lastProcessedAt()) <= 0) return false;
+        p.edit().putString("last_processed_at", atIso).apply();
+        return true;
+    }
+
     synchronized void enqueue(String title, String text) {
         try {
             JSONArray q = new JSONArray(p.getString("queue", "[]"));

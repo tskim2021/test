@@ -59,9 +59,15 @@ const readBody = (req) =>
     req.on('error', reject);
   });
 
-function broadcast(row) {
-  const msg = `event: deposit\ndata: ${JSON.stringify(row)}\n\n`;
+function broadcast(event, payload) {
+  const msg = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const c of clients) c.write(msg);
+}
+
+// 새 입금이 '처리 필요'인지 알리기 위한 일치 수준(쇼핑몰 미연동이면 null)
+async function levelOf(row) {
+  if (!shop || !ADMIN_TOKEN) return null;
+  try { return (await shop.matchLevels([row])).get(row.id) || null; } catch { return null; }
 }
 
 async function notifyTelegram(row) {
@@ -91,7 +97,7 @@ const server = http.createServer(async (req, res) => {
       if (!parsed) return json(res, 200, { ok: true, ignored: true });
       const row = db.add(parsed);
       if (!row) return json(res, 200, { ok: true, duplicate: true });
-      broadcast(row);
+      broadcast('deposit', { ...row, match_level: await levelOf(row), shop: !!shop && !!ADMIN_TOKEN });
       notifyTelegram(row);
       return json(res, 200, { ok: true, id: row.id });
     }
@@ -134,6 +140,23 @@ const server = http.createServer(async (req, res) => {
       }
       const deposits = rows.map((r) => ({ ...r, match_level: levels.get(r.id) || null, order_items: r.order_id ? orderItems[r.order_id] || [] : undefined }));
       return json(res, 200, { deposits, count, total, page, limit, pages: Math.max(1, Math.ceil(count / limit)), shop: !!shop && !!ADMIN_TOKEN, admin: !!ADMIN_TOKEN, match_error: matchError });
+    }
+
+    // 앱 푸시 따라잡기: 연결이 끊긴 사이의 '처리 필요'(새 입금)와 '처리 완료'를 돌려준다.
+    // ?deposit=마지막으로 본 입금 id&processed=마지막으로 본 처리 시각(ISO). 둘 다 없으면 기준점(max_id, now)만 돌려준다.
+    if (req.method === 'GET' && url.pathname === '/api/push/since') {
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      const out = { max_id: db.maxId(), now: new Date().toISOString(), deposits: [], processed: [] };
+      const dep = url.searchParams.get('deposit');
+      const proc = url.searchParams.get('processed');
+      if (dep !== null && /^\d+$/.test(dep)) {
+        const rows = db.after(Number(dep), 50).filter((r) => !r.order_id); // 이미 처리된 입금은 아래 processed 로 알린다
+        let levels = new Map();
+        if (shop && ADMIN_TOKEN) { try { levels = await shop.matchLevels(rows); } catch { /* 일치 수준 없이 알림 */ } }
+        out.deposits = rows.map((r) => ({ id: r.id, sender: r.sender, amount: r.amount, received_at: r.received_at, match_level: levels.get(r.id) || null, shop: !!shop && !!ADMIN_TOKEN }));
+      }
+      if (proc && !Number.isNaN(Date.parse(proc))) out.processed = db.processedSince(proc, 50);
+      return json(res, 200, out);
     }
 
     // 선택 삭제: DB에서 지우지 않고 목록에서만 숨긴다(hidden=1) — 관리자 전용
@@ -196,6 +219,7 @@ const server = http.createServer(async (req, res) => {
         db.release(deposit.id);
         return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
       }
+      broadcast('processed', { id: deposit.id, sender: deposit.sender, amount: deposit.amount, od_id: odId, manual, memo: db.get(deposit.id).memo, at: new Date().toISOString() });
       return json(res, 200, { ok: true, od_id: odId, manual });
     }
 

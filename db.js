@@ -57,6 +57,12 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       return r.changes ? byId.get(key) : null;
     },
     get: (id) => getOne.get(id),
+    // 앱 푸시 따라잡기용
+    maxId: () => db.prepare('SELECT COALESCE(MAX(id), 0) AS n FROM deposits').get().n,
+    after: (id, limit = 50) => db.prepare(`${BASE} WHERE d.id > ? AND d.hidden = 0 ORDER BY d.id ASC LIMIT ?`).all(id, limit),
+    processedSince: (iso, limit = 50) => db.prepare(
+      `SELECT d.id, d.sender, d.amount, d.memo, m.od_id, m.manual, m.confirmed_at AS at
+         FROM matches m JOIN deposits d ON d.id = m.deposit_id WHERE m.confirmed_at > ? ORDER BY m.confirmed_at ASC LIMIT ?`).all(iso, limit),
     hide(ids) {
       let n = 0;
       for (const id of ids) n += hideStmt.run(id).changes;

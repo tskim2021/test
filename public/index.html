@@ -187,6 +187,11 @@
 <script>
 const $ = (id) => document.getElementById(id);
 const won = (n) => n.toLocaleString('ko-KR') + '원';
+// 앱(WebView)이 주소 뒤에 #token=… 을 붙여 열면 로그인 없이 들어온다(해시는 서버로 전송되지 않는다).
+try {
+  const m = location.hash.match(/token=([^&]+)/);
+  if (m) { localStorage.setItem('viewToken', decodeURIComponent(m[1])); history.replaceState(null, '', location.pathname + location.search); }
+} catch {}
 let token = localStorage.getItem('viewToken') || '';
 const state = { from: '', to: '', q: '', limit: 20, page: 1, range: 'today', datefield: 'paid' };
 let es, highlightId = null, reqSeq = 0, shopEnabled = false, adminEnabled = false;
@@ -340,6 +345,7 @@ function connect() {
   es = new EventSource('/events?token=' + encodeURIComponent(token));
   es.onopen = () => { $('dot').classList.add('on'); $('statusText').textContent = '실시간 연결됨'; };
   es.onerror = () => { $('dot').classList.remove('on'); $('statusText').textContent = '재연결 중…'; };
+  es.addEventListener('processed', () => { load(); }); // 다른 곳에서 처리되면 목록을 새로 고친다
   es.addEventListener('deposit', (e) => {
     highlightId = JSON.parse(e.data).id;
     beep();

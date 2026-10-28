@@ -90,3 +90,22 @@ test('candidates/all: 주문일자 검색용 조회', () => {
   db.hide([k.id]);
   assert.equal(db.all({}).length, 2); // 숨김 제외
 });
+
+test('푸시 따라잡기: 마지막 id 이후 입금, 처리 시각 이후 처리 내역', () => {
+  const db = mk();
+  const all = db.search({}).rows;
+  const maxId = Math.max(...all.map((r) => r.id));
+  assert.equal(db.maxId(), maxId);
+  assert.equal(db.after(0).length, 3);
+  assert.deepEqual(db.after(0).map((r) => r.id), all.map((r) => r.id).sort((a, b) => a - b)); // id 오름차순
+  assert.equal(db.after(maxId).length, 0);
+  assert.equal(db.after(maxId - 1).length, 1);
+  const k = all.find((r) => r.sender === '김미희');
+  db.claim(k.id, 'A77', true);
+  db.setMemo(k.id, '사유');
+  const procs = db.processedSince('1970-01-01T00:00:00.000Z');
+  assert.equal(procs.length, 1);
+  assert.deepEqual([procs[0].sender, procs[0].od_id, procs[0].manual, procs[0].memo], ['김미희', 'A77', 1, '사유']);
+  assert.equal(db.processedSince(procs[0].at).length, 0); // 같은 시각 이후만
+  assert.ok(db.after(0).find((r) => r.id === k.id).order_id === 'A77'); // 처리된 입금은 order_id 가 있어 서버가 알림에서 제외
+});
