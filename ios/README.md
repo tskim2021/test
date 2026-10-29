@@ -52,7 +52,7 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 server {
   server_name deposit.ameyokovip.com;
   location / {
-    proxy_pass http://127.0.0.1:3000;   # 서버 PORT 에 맞춘다
+    proxy_pass http://127.0.0.1:3100;   # 서버 PORT(기본 3100)
     proxy_http_version 1.1;
     proxy_set_header Connection '';
     proxy_buffering off;                 # SSE(실시간)에 필요
