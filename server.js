@@ -5,6 +5,7 @@ import { openDb, isDate } from './db.js';
 import { parseNotification } from './parser.js';
 import { createShop, orderKeys, relatedDepositIds } from './shop.js';
 import { buildChart } from './chart.js';
+import { createApns, isDeadToken, pushMessage } from './apns.js';
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -98,7 +99,26 @@ const readBody = (req) =>
     req.on('error', reject);
   });
 
+let apns = null;
+try {
+  apns = createApns({ keyPath: process.env.APNS_KEY_PATH, keyId: process.env.APNS_KEY_ID, teamId: process.env.APNS_TEAM_ID, topic: process.env.APNS_TOPIC });
+} catch (e) { console.error('APNs 설정 오류:', e.message); }
+
+// iPhone 으로 푸시. 실패는 서버 동작에 영향 없게 삼키고, 폐기된 토큰은 지운다.
+async function sendApns(event, payload) {
+  const m = apns && pushMessage(event, payload);
+  if (!m) return;
+  for (const t of db.apnsTokens()) {
+    const r = await apns.send(t.token, !!t.sandbox, m);
+    if (!r.ok) {
+      console.error('APNs 실패:', r.status, r.reason);
+      if (isDeadToken(r)) db.removeApnsToken(t.token);
+    }
+  }
+}
+
 function broadcast(event, payload) {
+  sendApns(event, payload).catch((e) => console.error('APNs 오류:', e.message));
   const msg = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
   for (const c of clients.keys()) c.write(msg);
   // 보낼 때 폰 앱이 연결돼 있었는지 기록한다(나중에 "푸시가 갔나?"를 확인하기 위해). 연결이 없었다면 앱은 재연결 때 따라잡는다.
@@ -325,6 +345,15 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
       broadcast('test', { at: new Date().toISOString() });
       const cc = clientCounts();
       return json(res, 200, { ok: true, listeners: cc.app + cc.web, apps: cc.app, webs: cc.web });
+    }
+
+    // iPhone 앱이 APNs 기기 토큰을 등록한다. sandbox=true 는 Xcode 직접 설치(개발) 빌드, TestFlight/App Store 는 false.
+    if (req.method === 'POST' && url.pathname === '/api/apns/register') {
+      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      let b; try { b = JSON.parse(await readBody(req)); } catch { b = {}; }
+      if (!/^[0-9a-fA-F]{32,200}$/.test(b.token || '')) return json(res, 400, { error: 'bad token' });
+      db.addApnsToken(b.token.toLowerCase(), !!b.sandbox);
+      return json(res, 200, { ok: true, enabled: !!apns });
     }
 
     // 앱 푸시 따라잡기: 연결이 끊긴 사이의 '처리 필요'(새 입금)와 '처리 완료'를 돌려준다.

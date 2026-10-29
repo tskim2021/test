@@ -56,6 +56,9 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
       webs INTEGER NOT NULL
     )
   `);
+  // iPhone 푸시(APNs) 기기 토큰
+  db.exec('CREATE TABLE IF NOT EXISTS apns_tokens (token TEXT PRIMARY KEY, sandbox INTEGER NOT NULL DEFAULT 0, at TEXT NOT NULL)');
+  const apnsSet = db.prepare('INSERT INTO apns_tokens (token, sandbox, at) VALUES (?,?,?) ON CONFLICT(token) DO UPDATE SET sandbox = excluded.sandbox, at = excluded.at');
   const pushLogIns = db.prepare('INSERT INTO push_log (at, event, deposit_id, label, apps, webs) VALUES (?,?,?,?,?,?)');
   // 처리 종류(matches.manual): 0=자동(시스템이 이름·금액 일치로 자동 처리) 1=수동(사유 입력) 2=기처리 연결 3=일치처리(관리자가 일치 건을 확인 후 처리)
   // 자동 처리 기능이 생기기 전의 0 은 모두 관리자가 버튼으로 처리한 것이므로 한 번만 3 으로 옮긴다.
@@ -86,6 +89,9 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     setMeta: (k, v) => metaSet.run(k, String(v)),
     // 자동 처리 대상: 기준 시각 이후에 들어왔고 아직 처리되지 않은(숨김 제외) 입금, 오래된 것부터
     unprocessedSince: (iso, limit = 100) => db.prepare(`${BASE} WHERE d.hidden = 0 AND m.od_id IS NULL AND d.received_at >= ? ORDER BY d.id ASC LIMIT ?`).all(iso, limit),
+    addApnsToken: (token, sandbox) => apnsSet.run(token, sandbox ? 1 : 0, new Date().toISOString()),
+    apnsTokens: () => db.prepare('SELECT token, sandbox FROM apns_tokens').all(),
+    removeApnsToken: (token) => db.prepare('DELETE FROM apns_tokens WHERE token = ?').run(token),
     logPush: ({ event, depositId = null, label = '', apps, webs }, at = new Date()) => pushLogIns.run(at.toISOString(), event, depositId, label, apps, webs),
     pushLog: (limit = 100) => db.prepare('SELECT * FROM push_log ORDER BY id DESC LIMIT ?').all(limit),
     // 앱 푸시 따라잡기용
