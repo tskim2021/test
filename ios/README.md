@@ -15,7 +15,7 @@ developer.apple.com → Identifiers → `+` → App IDs → App → Bundle ID �
 ```
 cd ios
 ```
-`project.yml` 의 `DEVELOPMENT_TEAM`(Team ID)과 `PRODUCT_BUNDLE_IDENTIFIER`(위 Bundle ID)를 고친 뒤:
+`project.yml` 의 `DEVELOPMENT_TEAM`(Team ID, 이미 입력됨)과 `PRODUCT_BUNDLE_IDENTIFIER`(위 Bundle ID)를 확인한 뒤:
 ```
 xcodegen generate
 open DepositMonitor.xcodeproj

@@ -9,7 +9,7 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     # 아래 두 값을 본인 것으로 바꾼다(README 참고)
-    DEVELOPMENT_TEAM: "YOUR_TEAM_ID"
+    DEVELOPMENT_TEAM: "L89UNHMAA6"
     PRODUCT_BUNDLE_IDENTIFIER: com.ameyokovip.depositmonitor
 targets:
   DepositMonitor:
