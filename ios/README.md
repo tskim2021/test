@@ -9,7 +9,7 @@ iOS는 다른 앱(카카오뱅크)의 알림을 읽을 수 없습니다. 그래�
 4. APNs 인증 키: developer.apple.com → Certificates, Identifiers & Profiles → Keys → `+` → *Apple Push Notifications service (APNs)* 체크 → 다운로드한 `AuthKey_XXXXXXXXXX.p8` 파일 (한 번만 받을 수 있음), Key ID(10자리), Team ID(Membership 화면)
 
 ## 1. 앱 ID 만들기
-developer.apple.com → Identifiers → `+` → App IDs → App → Bundle ID 를 정하고(예: `com.내회사.depositmonitor`) **Push Notifications** 를 체크해 등록.
+developer.apple.com → Identifiers → `+` → App IDs → App → Bundle ID 를 정하고(예: `com.ameyokovip.depositmonitor`) **Push Notifications** 를 체크해 등록.
 
 ## 2. Xcode 프로젝트 만들고 빌드
 ```
@@ -34,7 +34,7 @@ Xcode 에서 Signing & Capabilities → *Automatically manage signing* 이 켜�
 APNS_KEY_PATH=/home/skiops/keys/AuthKey_XXXXXXXXXX.p8
 APNS_KEY_ID=XXXXXXXXXX
 APNS_TEAM_ID=YYYYYYYYYY
-APNS_TOPIC=com.내회사.depositmonitor     # 앱의 Bundle ID
+APNS_TOPIC=com.ameyokovip.depositmonitor     # 앱의 Bundle ID
 ```
 (설정이 없으면 iPhone 푸시만 꺼지고 나머지는 그대로 동작합니다.)
 

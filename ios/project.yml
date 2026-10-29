@@ -1,6 +1,6 @@
 name: DepositMonitor
 options:
-  bundleIdPrefix: com.example
+  bundleIdPrefix: com.ameyokovip
   deploymentTarget:
     iOS: "15.0"
 settings:
@@ -10,7 +10,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # 아래 두 값을 본인 것으로 바꾼다(README 참고)
     DEVELOPMENT_TEAM: "YOUR_TEAM_ID"
-    PRODUCT_BUNDLE_IDENTIFIER: com.example.depositmonitor
+    PRODUCT_BUNDLE_IDENTIFIER: com.ameyokovip.depositmonitor
 targets:
   DepositMonitor:
     type: application
