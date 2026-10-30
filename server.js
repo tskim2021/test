@@ -162,7 +162,11 @@ const server = http.createServer(async (req, res) => {
       let payload;
       try { payload = JSON.parse(body); } catch { payload = { text: body }; }
       const parsed = parseNotification({ title: payload.title, text: payload.text });
-      if (!parsed) return json(res, 200, { ok: true, ignored: true });
+      if (!parsed) {
+        // 입금으로 못 읽은 요청은 원인 확인용으로 앞부분만 남긴다(문자 형식 변경·단축어 설정 오류 진단).
+        console.error('입금 아님(무시):', JSON.stringify(String(payload.title || '') + ' | ' + String(payload.text ?? '')).slice(0, 300));
+        return json(res, 200, { ok: true, ignored: true });
+      }
       const row = db.add(parsed);
       if (!row) return json(res, 200, { ok: true, duplicate: true });
       let autoOd = null;
