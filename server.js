@@ -76,6 +76,8 @@ async function sweepAuto() {
 if (AUTO_PROCESS && shop) setInterval(sweepAuto, Number(process.env.AUTO_SWEEP_MS || 60_000)).unref();
 
 const isAdmin = (req, url) => !!ADMIN_TOKEN && safeEq(tokenOf(req, url), ADMIN_TOKEN);
+// 관리자 토큰은 열람 권한도 포함한다(앱에 관리자 토큰 하나만 넣어도 되게).
+const canView = (req, url) => safeEq(tokenOf(req, url), VIEW_TOKEN) || isAdmin(req, url);
 const clients = new Map(); // res -> { app: 앱(PushService)의 연결이면 true, 웹 화면이면 false }
 const clientCounts = () => { let app = 0, web = 0; for (const v of clients.values()) v.app ? app++ : web++; return { app, web }; };
 
@@ -178,7 +180,7 @@ const server = http.createServer(async (req, res) => {
 
     // 그래프: 같은 조회 조건(기간·일자 기준·입금자)의 시간별/일별/월별 입금 금액(미처리/처리완료 구분)
     if (req.method === 'GET' && url.pathname === '/api/deposits/chart') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       const from = url.searchParams.get('from') || '';
       const to = url.searchParams.get('to') || '';
       if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: 'invalid date' });
@@ -195,7 +197,7 @@ const server = http.createServer(async (req, res) => {
 
     // 조회: ?from=YYYY-MM-DD&to=YYYY-MM-DD&q=입금자&limit=10|20|50|100&page=1  (날짜는 한국시간 기준)
     if (req.method === 'GET' && url.pathname === '/api/deposits') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       const from = url.searchParams.get('from') || '';
       const to = url.searchParams.get('to') || '';
       if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: 'invalid date' });
@@ -270,7 +272,7 @@ const server = http.createServer(async (req, res) => {
     // 푸시 발송 기록 조회: /push-log?token=접속토큰  (&format=json 도 가능)
     if (req.method === 'GET' && url.pathname === '/push-log') {
       res.setHeader('cache-control', 'no-store');
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) { res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('unauthorized'); }
+      if (!canView(req, url)) { res.writeHead(401, { 'content-type': 'text/plain; charset=utf-8' }); return res.end('unauthorized'); }
       const rows = db.pushLog(200);
       if (url.searchParams.get('format') === 'json') return json(res, 200, { push_log: rows });
       const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -301,7 +303,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
         res.end(`<!doctype html><html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>푸시 테스트</title>
 <body style="font:17px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:20px;max-width:560px;margin:0 auto">${body}</body></html>`);
       };
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) {
+      if (!canView(req, url)) {
         return page(401, '<h2>❌ 토큰이 올바르지 않습니다</h2><p>주소 끝의 <code>?token=</code> 뒤에 접속 토큰을 넣어 주세요.</p>');
       }
       const q = url.searchParams;
@@ -341,7 +343,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
 
     // 푸시 테스트: 입금 기록을 만들지 않고, 연결된 앱/웹에 테스트 이벤트만 보낸다. listeners = 지금 연결된 수신기 수.
     if (req.method === 'POST' && url.pathname === '/api/push/test') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       broadcast('test', { at: new Date().toISOString() });
       const cc = clientCounts();
       return json(res, 200, { ok: true, listeners: cc.app + cc.web, apps: cc.app, webs: cc.web });
@@ -349,7 +351,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
 
     // iPhone 앱이 APNs 기기 토큰을 등록한다. sandbox=true 는 Xcode 직접 설치(개발) 빌드, TestFlight/App Store 는 false.
     if (req.method === 'POST' && url.pathname === '/api/apns/register') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       let b; try { b = JSON.parse(await readBody(req)); } catch { b = {}; }
       if (!/^[0-9a-fA-F]{32,200}$/.test(b.token || '')) return json(res, 400, { error: 'bad token' });
       db.addApnsToken(b.token.toLowerCase(), !!b.sandbox);
@@ -359,7 +361,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
     // 앱 푸시 따라잡기: 연결이 끊긴 사이의 '처리 필요'(새 입금)와 '처리 완료'를 돌려준다.
     // ?deposit=마지막으로 본 입금 id&processed=마지막으로 본 처리 시각(ISO). 둘 다 없으면 기준점(max_id, now)만 돌려준다.
     if (req.method === 'GET' && url.pathname === '/api/push/since') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       const out = { max_id: db.maxId(), now: new Date().toISOString(), deposits: [], processed: [] };
       const dep = url.searchParams.get('deposit');
       const proc = url.searchParams.get('processed');
@@ -449,7 +451,7 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
     }
 
     if (req.method === 'GET' && url.pathname === '/events') {
-      if (!safeEq(tokenOf(req, url), VIEW_TOKEN)) return json(res, 401, { error: 'unauthorized' });
+      if (!canView(req, url)) return json(res, 401, { error: 'unauthorized' });
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
       res.write(': connected\n\n');
       req.socket.setKeepAlive(true, 15_000); // 중간에서 죽은 연결을 빨리 알아채도록
