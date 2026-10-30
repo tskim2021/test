@@ -13,6 +13,11 @@ test('pushMessage: 안드로이드와 같은 문구', () => {
   assert.match(pushMessage('processed', { amount: 1, sender: 'a', od_id: 'A1', kind: 0 }).body, /A1 \(자동 처리\)/);
   assert.match(pushMessage('processed', { amount: 1, sender: 'a', od_id: 'A1', linked: true }).body, /기처리/);
   assert.equal(pushMessage('nothing', {}), null);
+  assert.equal(pushMessage('test', { kind: 'basic' }).title, '🔔 푸시 테스트');
+  assert.equal(pushMessage('test', { kind: 'needs', amount: 35900, sender: '홍길동', shop: true, match_level: 'full' }).title, '[테스트] 💰 입금 35,900원 · 처리 필요');
+  assert.match(pushMessage('test', { kind: 'done', amount: 1, sender: 'a', od_id: 'A-TEST-0001', manual: true }).title, /^\[테스트\] ✅ 처리 완료/);
+  assert.match(pushMessage('test', { kind: 'done', amount: 1, sender: 'a', od_id: 'A1', manual: true }).body, /수동 처리/);
+  assert.match(pushMessage('processed', { amount: 1, sender: 'a', od_id: 'A1', kind: 3 }).body, /^a → 주문 A1$/);
 });
 
 test('createApns: 설정이 없으면 null', () => assert.equal(createApns({}), null));

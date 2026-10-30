@@ -318,13 +318,16 @@ ${rows.map((r) => `<tr><td>${esc(kst(r.at))}</td><td>${esc(kindOf(r.event))}</td
       if (kind === 'done') Object.assign(payload, { sender, amount, od_id: 'A-TEST-0001', manual, memo });
       broadcast('test', payload);
       const { app, web } = clientCounts();
+      const iphones = apns ? db.apnsTokens().length : 0;
       const tok = esc(tokenOf(req, url));
       const label = { basic: '기본 테스트', needs: `처리 필요 예시 (${sender} ${amount.toLocaleString('ko-KR')}원)`, done: `처리 완료 예시 (${sender} ${amount.toLocaleString('ko-KR')}원)` }[kind];
       const btn = 'display:inline-block;padding:9px 14px;margin:4px 6px 4px 0;border:1px solid #1f9d55;border-radius:10px;color:#1f9d55;text-decoration:none;font-size:15px';
       return page(200, `
-<h2>${app > 0 ? '✅ 테스트 푸시를 보냈습니다' : '⚠️ 폰 앱의 푸시 연결이 없습니다'}</h2>
-<p>보낸 것: <b>${esc(label)}</b><br>폰 앱 푸시 연결: <b>${app}개</b> · 열려 있는 웹 화면: <b>${web}개</b></p>
-<p>${app > 0
+<h2>${app > 0 || iphones > 0 ? '✅ 테스트 푸시를 보냈습니다' : '⚠️ 폰 앱의 푸시 연결이 없습니다'}</h2>
+<p>보낸 것: <b>${esc(label)}</b><br>안드로이드 앱 푸시 연결: <b>${app}개</b> · iPhone: <b>${iphones}대</b> · 열려 있는 웹 화면: <b>${web}개</b></p>
+<p>${iphones > 0 && app === 0
+  ? 'iPhone 에 <b>[테스트]</b> 알림이 와야 합니다. 오지 않으면 iPhone 설정 → 알림 → 입금 모니터에서 알림 허용과 집중 모드를 확인하세요.'
+  : app > 0
   ? '폰에 알림이 와야 합니다(제목 앞에 <b>[테스트]</b>가 붙습니다). 오지 않으면 앱 <b>설정 탭의 로그</b>를 보세요: <b>"푸시 수신"</b>이 있는데 알림이 안 떴다면 폰의 알림 차단 문제, 로그에 아무것도 없다면 연결 문제입니다.'
   : '웹 화면은 연결돼 있지만 <b>폰 앱</b>은 서버에 연결돼 있지 않습니다. 앱을 <b>최신 APK</b>로 업데이트하고 설정 탭에서 <b>푸시 연결: 실시간 연결됨</b>인지 확인하세요. (앱이 예전 버전이면 앱 연결도 웹 화면으로 센다)'}</p>
 <p><a style="${btn}" href="?token=${tok}">기본</a>

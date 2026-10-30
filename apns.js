@@ -75,7 +75,12 @@ const won = (n) => `${Number(n || 0).toLocaleString('ko-KR')}원`;
 // 안드로이드 PushText 와 같은 문구. 보낼 게 없는 이벤트는 null.
 export function pushMessage(event, p) {
   const sender = p.sender || '(입금자 미확인)';
-  if (event === 'test') return { title: '🔔 푸시 테스트', body: '이 알림이 보이면 iPhone 푸시가 정상입니다' };
+  if (event === 'test') {
+    // 테스트 페이지의 예시(처리 필요/처리 완료)는 실제 알림과 같은 모양에 [테스트] 를 붙여 보낸다.
+    const real = p.kind === 'needs' ? pushMessage('deposit', p) : p.kind === 'done' ? pushMessage('processed', p) : null;
+    if (real) return { ...real, title: `[테스트] ${real.title}` };
+    return { title: '🔔 푸시 테스트', body: '이 알림이 보이면 iPhone 푸시가 정상입니다' };
+  }
   if (event === 'deposit') {
     const hints = { full: '일치하는 주문이 있어 바로 처리할 수 있어요', name: '이름만 일치해요 · 금액 확인 필요', amount: '금액만 일치해요 · 입금자 확인 필요', other: '이미 처리된 주문과 일치해요' };
     const hint = !p.shop ? '처리가 필요합니다' : hints[p.match_level] || '일치하는 주문이 없어요 · 확인 필요';
@@ -83,7 +88,7 @@ export function pushMessage(event, p) {
   }
   if (event === 'processed') {
     let body = `${sender} → 주문 ${p.od_id}`;
-    const kind = p.linked ? 2 : Number(p.kind ?? 0);
+    const kind = p.linked ? 2 : typeof p.kind === 'number' ? p.kind : p.manual ? 1 : 0;
     if (kind === 0) body += ' (자동 처리)'; else if (kind === 1) body += ' (수동 처리)'; else if (kind === 2) body += ' (기처리 주문 연결)';
     if (p.memo) body += ` · ${p.memo}`;
     return { title: `✅ 처리 완료 · ${won(p.amount)}`, body, data: { id: p.id } };
