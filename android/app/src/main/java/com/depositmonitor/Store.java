@@ -29,6 +29,23 @@ final class Store {
         p.edit().putString("url", u).putString("token", token.trim()).apply();
     }
 
+    // ---- 수집 방식: true=카카오뱅크 입금 문자(기본), false=카카오뱅크 앱 알림 ----
+    boolean smsMode() { return p.getBoolean("sms_mode", true); }
+    void setSmsMode(boolean on) { p.edit().putBoolean("sms_mode", on).apply(); }
+
+    /** 보낸 적 없는 문자면 기록하고 true. 같은 문자가 알림 갱신으로 다시 보여도 한 번만 보낸다(최근 300건 기억). */
+    synchronized boolean markSent(String text) {
+        try {
+            JSONArray a = new JSONArray(p.getString("sms_sent", "[]"));
+            for (int i = 0; i < a.length(); i++) if (text.equals(a.getString(i))) return false;
+            JSONArray out = new JSONArray();
+            for (int i = Math.max(0, a.length() - 299); i < a.length(); i++) out.put(a.get(i));
+            out.put(text);
+            p.edit().putString("sms_sent", out.toString()).apply();
+            return true;
+        } catch (Exception e) { return true; }
+    }
+
     // ---- 푸시 설정/진행 상태 ----
     void setLastPush() { p.edit().putLong("last_push_at", System.currentTimeMillis()).apply(); }
     long lastPushAt() { return p.getLong("last_push_at", 0); }

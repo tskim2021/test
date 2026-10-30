@@ -185,7 +185,7 @@ public class MainActivity extends Activity {
         String ver = "?";
         try { ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
         root.addView(text("입금 모니터 v" + ver, 22, true));
-        root.addView(text("카카오뱅크 입금 알림을 서버로 전송하고, 서버의 처리 상황을 푸시로 알려 줍니다.", 14, false));
+        root.addView(text("카카오뱅크 입금 문자(또는 앱 알림)를 서버로 전송하고, 서버의 처리 상황을 푸시로 알려 줍니다.", 14, false));
 
         status = text("", 15, true);
         status.setPadding(0, dp(12), 0, dp(12));
@@ -213,6 +213,18 @@ public class MainActivity extends Activity {
             Sender.flush(store);
             ensurePush();
         }));
+
+        Switch sms = new Switch(this);
+        sms.setText("카카오뱅크 입금 문자로 받기 (끄면 카카오뱅크 앱 알림으로 받음)");
+        sms.setChecked(store.smsMode());
+        sms.setPadding(0, dp(8), 0, dp(8));
+        sms.setOnCheckedChangeListener((CompoundButton b, boolean on) -> {
+            store.setSmsMode(on);
+            store.log("수집 방식 변경: " + (on ? "카카오뱅크 입금 문자" : "카카오뱅크 앱 알림"));
+            refresh();
+        });
+        root.addView(sms);
+        root.addView(text("※ 문자 방식은 카카오뱅크 SMS 알림(유료)이 이 폰 번호로 와야 합니다. 카카오뱅크 앱이 켜져 있어도 놓치지 않습니다.", 12, false));
 
         Switch push = new Switch(this);
         push.setText("푸시 알림 받기 (처리 필요 / 처리 완료)");
@@ -246,7 +258,7 @@ public class MainActivity extends Activity {
                 }
             }).start();
         }));
-        root.addView(button("1) 알림 접근 허용 설정 열기 (카카오뱅크 알림 읽기)", v ->
+        root.addView(button("1) 알림 접근 허용 설정 열기 (입금 문자/알림 읽기)", v ->
             startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))));
         root.addView(button("2) 배터리 최적화 제외 요청 (푸시 유지에 필수)", v -> askBatteryExemption()));
 
@@ -314,6 +326,7 @@ public class MainActivity extends Activity {
         String url = store.serverUrl();
         String warn = url.startsWith("http://") ? "\n⚠ http:// 는 토큰이 암호화되지 않습니다. 가능하면 https 사용" : "";
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
+                + "\n수집 방식: " + (store.smsMode() ? "카카오뱅크 입금 문자" : "카카오뱅크 앱 알림")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
                 + "\n푸시 연결: " + pushStateText()
                 + "\n마지막 푸시 수신: " + lastPushText()
