@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-@font-face{font-family:NKR;src:url(fonts/NotoSansKR.ttf);font-weight:100 900}
+@font-face{font-family:NKR;src:url(fonts/NotoSansKR.ttf);font-weight:100 900}@font-face{font-family:NJP;src:url(fonts/NotoSansJP.ttf);font-weight:100 900}@font-face{font-family:NSC;src:url(fonts/NotoSansSC.ttf);font-weight:100 900}
 :root{--ink:#0d1024;--coral:#ff7a59;--amber:#ffc978;--violet:#8b6cff;--violet2:#c3b5ff;--teal:#3de0c5;--teal2:#a4f3e6}
 *{margin:0;box-sizing:border-box}
 html,body{width:1280px;height:720px;overflow:hidden;background:var(--ink);font-family:NKR,sans-serif;color:#fff}
@@ -23,13 +23,16 @@ html,body{width:1280px;height:720px;overflow:hidden;background:var(--ink);font-f
 .k .kt{font-size:17px;letter-spacing:5px;font-weight:700;color:rgba(255,255,255,.85)}
 .k .pill{font-size:15px;color:rgba(255,255,255,.7);padding:5px 14px;border-radius:30px;border:1px solid rgba(255,255,255,.2);letter-spacing:1px}
 .row{position:absolute;left:0;right:0;top:58px;display:flex;justify-content:center;gap:22px}
-.g{width:205px;text-align:center}
-.ch{font-size:176px;font-weight:900;line-height:1.05;color:transparent;-webkit-background-clip:text;background-clip:text;
+.g{width:190px;text-align:center}
+.ch{font-size:150px;font-weight:900;line-height:1.05;color:transparent;-webkit-background-clip:text;background-clip:text;
  background-image:linear-gradient(90deg,var(--c2,#ffd28a) 0%,var(--c1,#ff7a59) var(--p,0%),rgba(255,255,255,.2) var(--p,0%));transition:none}
 .g.act .ch{filter:drop-shadow(0 0 30px rgba(255,122,89,.5))}
 .rm{margin-top:10px;font-size:25px;letter-spacing:4px;font-weight:500;color:rgba(255,255,255,.42)}
 .g.act .rm,.g.done .rm{color:rgba(255,255,255,.95)}
-.stage{position:absolute;left:0;right:0;top:326px;height:130px}
+.mean{position:absolute;left:0;right:0;top:266px;display:flex;justify-content:center;align-items:center;gap:20px;font-size:38px;font-weight:700;color:var(--amber);opacity:0}.mean:before,.mean:after{content:'';width:70px;height:2px;background:rgba(255,201,120,.45)}
+.qcard{position:absolute;left:118px;top:62px;width:900px;height:372px;text-align:center;padding-top:30px;border-radius:40px}.qcard .ql{font-size:24px;letter-spacing:4px;color:rgba(255,255,255,.6);font-weight:500}.qcard .qm{font-size:88px;font-weight:900;margin-top:4px;line-height:1.2}.qcard .qd{width:120px;height:3px;background:rgba(255,255,255,.2);margin:14px auto 0}.qa{position:relative;height:150px}.qa>*{position:absolute;left:0;right:0;top:0;height:150px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.qans{font-size:100px;font-weight:900;line-height:1.15}.qans b{font-weight:900;color:transparent;-webkit-background-clip:text;background-clip:text;background-image:linear-gradient(90deg,var(--amber) 0%,var(--coral) var(--p,0%),rgba(255,255,255,.2) var(--p,0%))}.qans small{font-size:24px;letter-spacing:4px;color:rgba(255,255,255,.55);font-weight:500}
+.stage{position:absolute;left:0;right:0;top:330px;height:130px}
 .stage>*{position:absolute;left:0;right:0;top:0;height:130px;opacity:0;display:flex;align-items:center;justify-content:center}
 canvas.viz{width:1136px;height:130px}
 .jt{width:112px;height:112px;border-radius:26px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
@@ -71,10 +74,10 @@ canvas.viz{width:1136px;height:130px}
 #sub{position:absolute;left:0;right:0;bottom:26px;text-align:center}
 #sub .in{display:inline-block;padding:10px 34px 12px;border-radius:22px;background:rgba(10,12,30,.55);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(16px)}
 #sub .ko{display:block;font-size:38px;font-weight:700;letter-spacing:.5px;text-shadow:0 2px 12px rgba(0,0,0,.5)}
-#sub .en{display:block;margin-top:2px;font-size:23px;font-weight:400;color:rgba(255,255,255,.72);letter-spacing:.5px}
+#sub .en:empty{display:none}#sub .en{display:block;margin-top:2px;font-size:23px;font-weight:400;color:rgba(255,255,255,.72);letter-spacing:.5px}
 </style></head><body>
 <div id="bg"><div class="blob" id="b1"></div><div class="blob" id="b2"></div><div class="blob" id="b3"></div><div id="grain"></div><div id="vig"></div></div>
-<div id="hdr"><div class="l"><span class="dot"></span><b>TOPIK</b><span>BEGINNER · LESSON 01</span></div><div id="prog"></div></div>
+<div id="hdr"><div class="l"><span class="dot"></span><b>TOPIK</b><span data-l="hdr"></span></div><div id="prog"></div></div>
 
 <section class="sc" id="s_intro">
  <div class="big" id="big">01</div>
@@ -82,12 +85,12 @@ canvas.viz{width:1136px;height:130px}
  <div class="jam glass" style="left:700px;top:250px">ㅎ</div><div class="jam glass" style="left:1010px;top:300px">ㅂ</div>
  <div class="jam glass" style="left:840px;top:370px">ㄴ</div>
  <div class="ib"><div class="kick" id="i0">TOPIK · 한국어능력시험</div><div class="mask"><div class="t1" id="i1">초급 1강</div></div>
- <div class="mask"><div class="t2" id="i2">인사하기</div></div><div class="t3" id="i3">Greetings · Say hello in Korean</div></div>
+ <div class="mask"><div class="t2" id="i2">인사하기</div></div><div class="t3" id="i3" data-l="i3"></div></div>
 </section>
 
 <section class="sc" id="s_hello">
- <div class="k"><span class="num">01</span><span class="kt">HELLO · 인사</span><span class="pill">존댓말 · Polite</span></div>
- <div class="row" id="syl_hello"></div>
+ <div class="k"><span class="num">01</span><span class="kt" data-l="kh"></span><span class="pill" data-l="polite"></span></div>
+ <div class="row" id="syl_hello"></div><div class="mean" id="mean_hello" data-l="mh"></div>
  <div class="stage">
   <div id="h_viz"><canvas class="viz" width="1136" height="130"></canvas></div>
   <div id="h_jam"><div class="jt glass" id="j0"><b>ㅇ</b><span>silent</span></div><span class="op" id="o0">+</span><div class="jt glass" id="j1"><b>ㅏ</b><span>[a]</span></div><span class="op" id="o1">+</span><div class="jt glass" id="j2"><b>ㄴ</b><span>[n]</span></div><span class="op" id="o2">=</span><div class="jt glass res" id="j3"><b>안</b><span>[an]</span></div></div>
@@ -96,44 +99,51 @@ canvas.viz{width:1136px;height:130px}
 </section>
 
 <section class="sc" id="s_thanks">
- <div class="k"><span class="num">02</span><span class="kt">THANK YOU · 감사</span><span class="pill">존댓말 · Polite</span></div>
- <div class="row" id="syl_thanks"></div>
+ <div class="k"><span class="num">02</span><span class="kt" data-l="kt"></span><span class="pill" data-l="polite"></span></div>
+ <div class="row" id="syl_thanks"></div><div class="mean" id="mean_thanks" data-l="mt"></div>
  <div class="stage">
   <div id="k_viz"><canvas class="viz" width="1136" height="130"></canvas></div>
-  <div class="ctx" id="k_ctx"><div class="box glass"><svg width="52" height="52" viewBox="0 0 52 52"><path id="hrt" d="M26 46C-4 26 8 2 26 15 44 2 56 26 26 46Z" fill="#ff5d73"/></svg><div class="tt">고마울 때<small>When someone helps you</small></div></div></div>
-  <div class="note" id="k_note"><div class="w"><small>WRITTEN</small>감사<span class="hl">합니</span>다</div><div class="ar">→</div><div class="w"><small>SOUNDS LIKE</small>감사<span class="hl">함니</span>다</div><div class="rule">ㅂ + ㄴ → ㅁ + ㄴ</div></div>
+  <div class="ctx" id="k_ctx"><div class="box glass"><svg width="52" height="52" viewBox="0 0 52 52"><path id="hrt" d="M26 46C-4 26 8 2 26 15 44 2 56 26 26 46Z" fill="#ff5d73"/></svg><div class="tt">고마울 때<small data-l="ctx"></small></div></div></div>
+  <div class="note" id="k_note"><div class="w"><small data-l="wr"></small>감사<span class="hl">합니</span>다</div><div class="ar">→</div><div class="w"><small data-l="sd"></small>감사<span class="hl">함니</span>다</div><div class="rule">ㅂ + ㄴ → ㅁ + ㄴ</div></div>
   <div class="turn" id="k_turn"></div>
  </div>
 </section>
 
 <section class="sc" id="s_me">
- <div class="k"><span class="num">03</span><span class="kt">I AM A STUDENT · 자기소개</span><span class="pill">존댓말 · Polite</span></div>
+ <div class="k"><span class="num">03</span><span class="kt" data-l="km"></span><span class="pill" data-l="polite"></span></div>
  <div class="cards">
-  <div class="card glass" id="c1" style="--c1:#8b6cff;--c2:#c3b5ff"><div class="tg">PRONOUN + TOPIC</div><div class="hg">저는</div><div class="gl">I</div><div class="ro">jeo-neun</div></div><span class="plus">+</span>
-  <div class="card glass" id="c2" style="--c1:#3de0c5;--c2:#a4f3e6"><div class="tg">NOUN</div><div class="hg">학생</div><div class="gl">student</div><div class="ro">hak-ssaeng</div></div><span class="plus">+</span>
-  <div class="card glass" id="c3" style="--c1:#ff7a59;--c2:#ffb38f"><div class="tg">VERB · TO BE</div><div class="hg">입니다</div><div class="gl">am / is</div><div class="ro">im-ni-da</div></div>
+  <div class="card glass" id="c1" style="--c1:#8b6cff;--c2:#c3b5ff"><div class="tg" data-l="t1"></div><div class="hg">저는</div><div class="gl" data-l="g1"></div><div class="ro">jeo-neun</div></div><span class="plus">+</span>
+  <div class="card glass" id="c2" style="--c1:#3de0c5;--c2:#a4f3e6"><div class="tg" data-l="t2"></div><div class="hg">학생</div><div class="gl" data-l="g2"></div><div class="ro">hak-ssaeng</div></div><span class="plus">+</span>
+  <div class="card glass" id="c3" style="--c1:#ff7a59;--c2:#ffb38f"><div class="tg" data-l="t3"></div><div class="hg">입니다</div><div class="gl" data-l="g3"></div><div class="ro">im-ni-da</div></div>
  </div>
  <div class="stage">
   <div class="sent" id="m_sent"><div class="a"><i>저는 학생입니다.</i></div><div class="b">jeo-neun hak-ssaeng-im-ni-da</div></div>
-  <div class="note" id="m_note"><div class="w"><small>WRITTEN</small>학<span class="hl">생</span></div><div class="ar">→</div><div class="w"><small>SOUNDS LIKE</small>학<span class="hl">쌩</span></div><div class="rule">ㅅ after ㄱ → ㅆ (harder)</div></div>
   <div class="turn" id="m_turn"></div>
  </div>
 </section>
 
+<section class="sc" id="s_quiz">
+ <div class="k"><span class="num">?</span><span class="kt" data-l="kq"></span></div>
+ <div class="qcard glass" id="qc"><div class="ql" data-l="ql"></div><div class="qm" data-l="mh"></div><div class="qd"></div>
+  <div class="qa"><div id="qring"><svg width="96" height="96" viewBox="0 0 68 68"><circle cx="34" cy="34" r="29" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="6"/><circle class="ring" cx="34" cy="34" r="29" fill="none" stroke="#ffc978" stroke-width="6" stroke-linecap="round" transform="rotate(-90 34 34)" stroke-dasharray="182.2" stroke-dashoffset="0"/><rect x="28" y="20" width="12" height="20" rx="6" fill="#fff"/><path d="M23 33q0 11 11 11t11-11M34 44v6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg></div>
+  <div class="qans" id="qans"><b>안녕하세요</b><small>an-nyeong-ha-se-yo</small></div></div></div>
+</section>
 <section class="sc" id="s_outro">
- <div class="k"><span class="num">✓</span><span class="kt">TODAY'S EXPRESSIONS · 오늘 배운 표현</span></div>
- <div class="rc glass" id="r1" style="left:0"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">안녕하세요</div><div class="gl">Hello</div><div class="ro">an-nyeong-ha-se-yo</div></div>
- <div class="rc glass" id="r2" style="left:387px"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">감사합니다</div><div class="gl">Thank you</div><div class="ro">gam-sa-ham-ni-da</div></div>
- <div class="rc glass" id="r3" style="left:774px"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">저는 학생입니다</div><div class="gl">I am a student</div><div class="ro">jeo-neun hak-ssaeng-im-ni-da</div></div>
- <div class="next" id="nx"><div class="box glass"><small>NEXT LESSON</small>02 · 숫자 Numbers <span style="color:var(--amber)">→</span></div></div>
+ <div class="k"><span class="num">✓</span><span class="kt" data-l="ko_"></span></div>
+ <div class="rc glass" id="r1" style="left:0"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">안녕하세요</div><div class="gl" data-l="mh"></div><div class="ro">an-nyeong-ha-se-yo</div></div>
+ <div class="rc glass" id="r2" style="left:387px"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">감사합니다</div><div class="gl" data-l="mt"></div><div class="ro">gam-sa-ham-ni-da</div></div>
+ <div class="rc glass" id="r3" style="left:774px"><div class="ck"><svg width="18" height="18" viewBox="0 0 18 18"><path d="M3 9.5l4 4 8-9" stroke="#06241f" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="hg">저는 학생입니다</div><div class="gl" data-l="mm"></div><div class="ro">jeo-neun hak-ssaeng-im-ni-da</div></div>
+ <div class="next" id="nx"><div class="box glass"><small data-l="nl"></small><span data-l="nx"></span> <span style="color:var(--amber)">→</span></div></div>
 </section>
 <div id="sub"></div>
-<script src="timeline.js"></script>
+<script>const LANG=new URLSearchParams(location.search).get("lang")||"en";document.write('<script src="timeline_'+LANG+'.js"><\/script>')</script>
 <script>
+document.body.style.fontFamily={en:'NKR,NJP,sans-serif',ja:'NJP,NKR,sans-serif',zh:'NSC,NKR,sans-serif'}[LANG];
+document.querySelectorAll('[data-l]').forEach(e=>e.textContent=L[e.dataset.l]);
 const $=i=>document.getElementById(i),clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const ease=x=>{x=clamp(x);return 1-Math.pow(1-x,3)},back=x=>{x=clamp(x);const c=1.6;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
 const win=(t,a,b,f=.3)=>Math.min(ease((t-a)/f),ease((b-t)/f));
-const TURN=`<div class="box glass"><svg width="68" height="68" viewBox="0 0 68 68"><circle cx="34" cy="34" r="29" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="6"/><circle class="ring" cx="34" cy="34" r="29" fill="none" stroke="url(#gr)" stroke-width="6" stroke-linecap="round" transform="rotate(-90 34 34)" stroke-dasharray="182.2" stroke-dashoffset="0"/><defs><linearGradient id="gr"><stop offset="0" stop-color="#ffc978"/><stop offset="1" stop-color="#ff7a59"/></linearGradient></defs><rect x="28" y="20" width="12" height="20" rx="6" fill="#fff"/><path d="M23 33q0 11 11 11t11-11M34 44v6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg><div class="tt">Your turn · 따라 해 보세요<small>Say it out loud with me</small></div></div>`;
+const TURN=`<div class="box glass"><svg width="68" height="68" viewBox="0 0 68 68"><circle cx="34" cy="34" r="29" fill="none" stroke="rgba(255,255,255,.18)" stroke-width="6"/><circle class="ring" cx="34" cy="34" r="29" fill="none" stroke="url(#gr)" stroke-width="6" stroke-linecap="round" transform="rotate(-90 34 34)" stroke-dasharray="182.2" stroke-dashoffset="0"/><defs><linearGradient id="gr"><stop offset="0" stop-color="#ffc978"/><stop offset="1" stop-color="#ff7a59"/></linearGradient></defs><rect x="28" y="20" width="12" height="20" rx="6" fill="#fff"/><path d="M23 33q0 11 11 11t11-11M34 44v6" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg><div class="tt">${L.turn}<small>${L.turn2}</small></div></div>`;
 ['h_turn','k_turn','m_turn'].forEach(i=>$(i).innerHTML=TURN);
 $('prog').innerHTML=TL.scenes.map(()=>'<i><b></b></i>').join('');
 function mkSyl(id,w,r){$(id).innerHTML=w.map((c,i)=>`<div class="g"><div class="ch">${c}</div><div class="rm">${r[i]}</div></div>`).join('');return[...$(id).children];}
@@ -141,7 +151,7 @@ const SYL={hello:mkSyl('syl_hello',[...'안녕하세요'],['an','nyeong','ha','s
 function sweep(els,a0,a1,t,rowIn,s,stag){const n=els.length;els.forEach((e,i)=>{let p=t<a0?0:t>a1?1:clamp((t-a0)/(a1-a0)*n-i);
  e.firstChild.style.setProperty('--p',(p*100)+'%');e.className='g'+(p>0&&p<1?' act':p>=1?' done':'');
  const k=ease((rowIn-i*.07)/.55);e.style.opacity=k;e.style.transform=`translateY(${(1-k)*30-(p>0&&p<1?10:0)}px) scale(${p>0&&p<1?1.04:1})`;});}
-const SC=['intro','hello','thanks','me','outro'],IT=TL.items;
+const SC=['intro','hello','thanks','me','quiz','outro'],IT=TL.items;
 const sceneOf=t=>{const i=TL.scenes.findIndex(s=>t>=s.t0&&t<s.t1);return i<0?TL.scenes.length-1:i};
 const viz=[$('h_viz').firstChild,$('k_viz').firstChild];
 function drawViz(cv,t,o){const c=cv.getContext('2d'),W=1136,H=130,f=Math.min(TL.bands.length-1,Math.round(t*30)),b=TL.bands[f],n=b.length;
@@ -160,23 +170,25 @@ window.render=function(t){
   $('i0').style.opacity=ease((r-.1)/.5);$('i1').style.transform=`translateY(${(1-ease((r-.2)/.9))*115}%)`;$('i2').style.transform=`translateY(${(1-ease((r-.55)/.8))*115}%)`;$('i3').style.opacity=ease((r-1.2)/.6);
   $('big').style.opacity=ease(r/1.2);$('big').style.transform=`translateX(${(1-ease(r/1.4))*80+Math.sin(t/3)*8}px)`;
   document.querySelectorAll('#s_intro .jam').forEach((e,i)=>{const k=back((r-.3-i*.12)/.6);e.style.opacity=clamp(k);e.style.transform=`translateY(${Math.sin(t*1.3+i*1.7)*12}px) scale(${.6+.4*k})`;});}
- if(id==='hello'){sweep(SYL.hello,IT.h1[0],IT.h1[1],t,l-.1,s);
-  const vz=win(t,s.t0+.7,IT.h1[1]+.45);set($('h_viz'),vz,10);if(vz>0)drawViz(viz[0],t,0);
-  const jw=win(t,IT.h2[0]-.15,IT.h2[1]+.9);set($('h_jam'),jw,12);['j0','o0','j1','o1','j2','o2','j3'].forEach((n,i)=>{const k=back((t-IT.h2[0]-i*.16+.1)/.45);$(n).style.opacity=clamp(k);$(n).style.transform=`scale(${.7+.3*clamp(k)})`;});
-  set($('h_turn'),win(t,IT.h3[0]-.1,IT.hgap[1]+.1),12);ring('h_turn',t,IT.hgap[0],IT.hgap[1]);}
- if(id==='thanks'){sweep(SYL.thanks,IT.k1[0],IT.k1[1],t,l-.1,s);
-  const vz=win(t,s.t0+.7,IT.k1[1]+.45);set($('k_viz'),vz,10);if(vz>0)drawViz(viz[1],t,0);
+ if(id==='hello'){sweep(SYL.hello,IT.h1[0],IT.h1[1],t,l-.1,s);$('mean_hello').style.opacity=ease((t-IT.h1[0]-.1)/.5);
+  const vz=win(t,s.t0+.5,IT.h2[1]);set($('h_viz'),vz,10);if(vz>0)drawViz(viz[0],t,0);
+  const jw=win(t,IT.hj[0]-.15,IT.hj[1]+.7);set($('h_jam'),jw,12);['j0','o0','j1','o1','j2','o2','j3'].forEach((n,i)=>{const k=back((t-IT.hj[0]-i*.16+.1)/.45);$(n).style.opacity=clamp(k);$(n).style.transform=`scale(${.7+.3*clamp(k)})`;});
+  set($('h_turn'),win(t,IT.h3[0]+.2,IT.hgap[1]+.1),12);ring('h_turn',t,IT.hgap[0],IT.hgap[1]);}
+ if(id==='thanks'){sweep(SYL.thanks,IT.k1[0],IT.k1[1],t,l-.1,s);$('mean_thanks').style.opacity=ease((t-IT.k1[0]-.1)/.5);
+  const vz=win(t,s.t0+.5,IT.k1[1]+.4);set($('k_viz'),vz,10);if(vz>0)drawViz(viz[1],t,0);
   set($('k_ctx'),win(t,IT.k2[0]-.15,IT.k2[1]+.6),12);$('hrt').parentNode.style.transform=`scale(${1+.1*Math.sin(t*7)})`;
-  const nw=win(t,IT.k3[0]-.15,IT.k3[1]+1.0);set($('k_note'),nw,12);const ch=$('k_note').children;ch[1].style.opacity=ease((t-IT.k3[0]-.6)/.4);ch[2].style.opacity=ease((t-IT.k3[0]-.8)/.4);ch[3].style.opacity=ease((t-IT.k3[0]-1.2)/.4);
-  set($('k_turn'),win(t,IT.kgap[0]-.2,IT.kgap[1]+.1),12);ring('k_turn',t,IT.kgap[0],IT.kgap[1]);}
+  const nw=win(t,IT.k3[0]-.15,IT.k3b[1]+.5);set($('k_note'),nw,12);const ch=$('k_note').children;ch[0].style.opacity=1;ch[1].style.opacity=ease((t-IT.k3[0]-.5)/.4);ch[2].style.opacity=ease((t-IT.k3b[0]+.1)/.4);ch[3].style.opacity=ease((t-IT.k3b[0]-.3)/.4);
+  set($('k_turn'),win(t,IT.kgap[0]-.1,IT.kgap[1]+.1),12);ring('k_turn',t,IT.kgap[0],IT.kgap[1]);}
  if(id==='me'){const cs=[['c1','m1'],['c2','m2'],['c3','m3']];
   cs.forEach(([c,k],i)=>{const e=$(c),v=IT[k],all=t>=IT.m4[0]-.05&&t<=IT.m4[1]+.4;let p=t<v[0]?0:t>v[1]?1:clamp((t-v[0])/(v[1]-v[0]));if(t>=IT.m4[0])p=1;
    const act=(t>=v[0]&&t<=v[1])||all,inK=ease((l-.1-i*.12)/.55);e.querySelector('.hg').style.setProperty('--p',p*100+'%');e.className='card glass'+(act?' act':p>=1?' done':'');
    e.style.opacity=inK;e.style.transform=`translateY(${(1-inK)*34-(act?12:0)}px) scale(${act?1.03:1})`;});
   [...document.querySelectorAll('#s_me .plus')].forEach(e=>e.style.opacity=ease((l-.5)/.5));
-  set($('m_sent'),win(t,IT.m4[0]-.1,IT.m4[1]+.7),12);
-  const nw=win(t,IT.m5[0]-.1,IT.m5[1]+.5);set($('m_note'),nw,12);const ch=$('m_note').children;ch[1].style.opacity=ease((t-IT.m5[0]-.5)/.4);ch[2].style.opacity=ease((t-IT.m5[0]-.7)/.4);ch[3].style.opacity=ease((t-IT.m5[0]-1.1)/.4);
-  set($('m_turn'),win(t,IT.mgap[0]-.2,IT.mgap[1]+.1),12);ring('m_turn',t,IT.mgap[0],IT.mgap[1]);}
+  set($('m_sent'),win(t,IT.m4[0]-.1,IT.m5[1]+.4),12);
+  set($('m_turn'),win(t,IT.mgap[0]-.1,IT.mgap[1]+.1),12);ring('m_turn',t,IT.mgap[0],IT.mgap[1]);}
+ if(id==='quiz'){const qc=$('qc'),k=ease((l-.1)/.6);qc.style.opacity=k;qc.style.transform=`translateY(${(1-k)*30}px)`;
+  const rg=win(t,IT.qg[0]-.1,IT.q1[0]+.05,.2);$('qring').style.opacity=rg;ring('qring',t,IT.qg[0],IT.qg[1]);
+  const an=ease((t-IT.q1[0]+.05)/.35);$('qans').style.opacity=an;$('qans').style.transform=`scale(${.9+.1*back((t-IT.q1[0])/.5)})`;$('qans').querySelector('b').style.setProperty('--p',(clamp((t-IT.q1[0])/(IT.q1[1]-IT.q1[0]))*100)+'%');}
  if(id==='outro'){['r1','r2','r3'].forEach((n,i)=>{const k=ease((l-.35-i*.3)/.6);set($(n),k,40,.96);});set($('nx'),ease((l-1.6)/.6),20);}
  const sb=TL.subs.find(x=>t>=x.t0-.05&&t<=x.t1+.3);
  if(sb){if($('sub').dataset.k!==sb.ko)$('sub').innerHTML=`<span class="in"><span class="ko">${sb.ko}</span><span class="en">${sb.en}</span></span>`,$('sub').dataset.k=sb.ko;
