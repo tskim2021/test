@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{margin:0;box-sizing:border-box}
+html,body{width:1280px;height:720px;overflow:hidden;font-family:"WenQuanYi Zen Hei","Unifont",sans-serif}
+#bg{position:absolute;inset:0;background:linear-gradient(160deg,#1f2a44,#3b4a6b 55%,#5b6f8f)}
+.orb{position:absolute;border-radius:50%;filter:blur(60px);opacity:.35}
+.stage{position:absolute;left:0;right:0;top:0;height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;text-align:center}
+.tag{font-size:26px;letter-spacing:6px;color:#ffd9a0;margin-bottom:18px}
+.big{font-size:132px;font-weight:700;line-height:1.15}
+.mid{font-size:84px;font-weight:700}
+.rom{font-size:36px;color:#cfe0ff;margin-top:14px;letter-spacing:2px}
+.mean{font-size:40px;color:#ffe9c7;margin-top:10px}
+.card{background:rgba(255,255,255,.1);border:2px solid rgba(255,255,255,.25);border-radius:28px;padding:12px 50px;margin:7px;font-size:44px}
+.card small{display:block;font-size:24px;color:#ffe9c7;margin-top:6px}
+#sub{position:absolute;left:0;right:0;bottom:46px;text-align:center}
+#sub .ko{display:inline-block;background:rgba(0,0,0,.55);color:#fff;font-size:42px;padding:8px 28px;border-radius:12px}
+#sub .en{display:block;margin-top:10px;color:#ffe9c7;font-size:28px;text-shadow:0 2px 6px #000}
+#bar{position:absolute;left:0;bottom:0;height:8px;background:#ffb85c}
+#hint{position:absolute;right:30px;top:24px;color:rgba(255,255,255,.7);font-size:22px}
+</style></head><body>
+<div id="bg"></div>
+<div class="orb" id="o1" style="width:420px;height:420px;background:#ffb85c;left:-80px;top:-60px"></div>
+<div class="orb" id="o2" style="width:520px;height:520px;background:#6aa8ff;right:-120px;bottom:-140px"></div>
+<div id="hint">TOPIK 초급 · 1강</div>
+<div class="stage" id="stage"></div>
+<div id="sub"></div><div id="bar"></div>
+<script>
+// [start,end, html, ko subtitle, en subtitle]
+const S=[
+[0,4,`<div class="tag">TOPIK · 한국어능력시험</div><div class="big">초급 1강</div><div class="mean">인사하기 · Greetings</div>`,"안녕하세요! 오늘은 첫 번째 수업이에요.","Hello! This is our very first lesson."],
+[4,10,`<div class="tag">표현 1</div><div class="big">안녕하세요</div><div class="rom">an-nyeong-ha-se-yo</div><div class="mean">Hello</div>`,"“안녕하세요”는 만날 때 하는 인사예요.","“안녕하세요” is how we greet people."],
+[10,16,`<div class="tag">표현 2</div><div class="big">감사합니다</div><div class="rom">gam-sa-ham-ni-da</div><div class="mean">Thank you</div>`,"고마울 때는 “감사합니다”라고 말해요.","When you are thankful, say “감사합니다”."],
+[16,22,`<div class="tag">표현 3</div><div class="mid">저는 학생입니다</div><div class="rom">jeo-neun hak-saeng-im-ni-da</div><div class="mean">I am a student</div>`,"“저는 ~입니다”는 나를 소개하는 말이에요.","“저는 ~입니다” introduces yourself."],
+[22,27,`<div class="tag">복습</div><div class="card">안녕하세요<small>Hello</small></div><div class="card">감사합니다<small>Thank you</small></div><div class="card">저는 학생입니다<small>I am a student</small></div>`,"큰 소리로 한 번 따라 해 보세요.","Say them out loud, once more."],
+[27,30,`<div class="tag">다음 시간</div><div class="big">2강</div><div class="mean">숫자 · Numbers</div>`,"수고하셨습니다! 다음 시간에 만나요.","Great work! See you next lesson."]
+];
+const stage=document.getElementById('stage'),sub=document.getElementById('sub');
+const e=x=>1-Math.pow(1-x,3);
+let cur=-1;
+window.render=function(t){
+  let i=S.findIndex(s=>t>=s[0]&&t<s[1]); if(i<0)i=S.length-1;
+  const s=S[i];
+  if(i!==cur){cur=i;stage.innerHTML=s[2];sub.innerHTML=`<span class="ko">${s[3]}</span><span class="en">${s[4]}</span>`;}
+  const l=t-s[0], d=s[1]-s[0];
+  const inn=e(Math.min(1,l/0.7)), out=Math.min(1,(d-l)/0.5);
+  const a=Math.max(0,Math.min(inn,out));
+  stage.style.opacity=a; stage.style.transform=`translateY(${(1-inn)*30}px)`;
+  const sa=Math.max(0,Math.min(1,(l-0.3)/0.4,(d-l)/0.4)); sub.style.opacity=sa;
+  document.getElementById('o1').style.transform=`translate(${Math.sin(t/4)*40}px,${Math.cos(t/5)*30}px)`;
+  document.getElementById('o2').style.transform=`translate(${Math.cos(t/4)*40}px,${Math.sin(t/6)*30}px)`;
+  document.getElementById('bar').style.width=(t/30*1280)+'px';
+};
+render(0);
+</script></body></html>
