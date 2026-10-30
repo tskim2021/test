@@ -173,6 +173,21 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, id: row.id, auto_processed: autoOd });
     }
 
+    // 입금 직접 입력(관리자 전용): 알림을 자동으로 받지 못하는 계좌(iPhone)의 입금을 넣는다.
+    if (req.method === 'POST' && url.pathname === '/api/deposits/manual') {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      let b; try { b = JSON.parse(await readBody(req)); } catch { b = {}; }
+      const sender = String(b.sender || '').trim().slice(0, 30);
+      const amount = Number(b.amount);
+      if (!sender || !Number.isInteger(amount) || amount <= 0 || amount > 100_000_000) return json(res, 400, { error: '입금자와 금액을 확인하세요' });
+      const row = db.add({ amount, sender, balance: null, raw: `[직접입력] ${sender} ${amount}원 ${Date.now()}` });
+      db.setMemo(row.id, '직접 입력');
+      // 자동 처리는 하지 않는다(관리자가 목록에서 주문확인으로 처리). 일치 수준만 붙여 '처리 필요'로 알린다.
+      const level = await levelOf(row);
+      broadcast('deposit', { ...row, memo: '직접 입력', match_level: level, shop: !!shop && !!ADMIN_TOKEN });
+      return json(res, 200, { ok: true, id: row.id, match_level: level });
+    }
+
     // 가짜 입금 테스트(관리자 전용): /test-deposit?token=관리자토큰&amount=1000&sender=테스트
     // 실제 주문이 처리되지 않도록 자동 처리·텔레그램은 건너뛰고, 입금자 앞에 [테스트] 를 붙이고 메모에 표시한다. 목록에서 선택삭제로 숨기면 된다.
     if (req.method === 'GET' && url.pathname === '/test-deposit') {

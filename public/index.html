@@ -283,6 +283,7 @@
     <label><input type="checkbox" id="selAll"> 전체 선택</label>
     <span class="listbarR">
       <label class="doneToggle" id="doneToggle" hidden><input type="checkbox" id="doneOnly"> 처리완료만 보기</label>
+      <button class="btn" id="manualBtn" title="알림을 자동으로 받지 못하는 계좌(iPhone 등)의 입금을 직접 넣는다">＋ 입금 직접 입력</button>
       <span id="selCount" class="status"></span> <button class="btn danger" id="hideBtn" disabled>선택 삭제</button>
     </span>
   </div>
@@ -733,6 +734,33 @@ async function adminFetch(path, opts = {}) {
   localStorage.setItem('adminToken', adminToken);
   return r;
 }
+// 입금 직접 입력: 카카오뱅크 알림을 자동으로 받지 못할 때(iPhone) 입금자·금액을 넣어 목록에 올린다(처리는 주문확인으로).
+$('manualBtn').onclick = () => {
+  const sheet = $('sheet'); sheet.replaceChildren();
+  sheet.append(el('h3', null, '입금 직접 입력'), el('p', 'status', '카카오뱅크 알림에 나온 입금자와 금액을 그대로 넣으세요. 목록에 올라가고, 처리는 주문확인 버튼으로 합니다.'));
+  const name = el('input'); name.placeholder = '입금자 (예: 박사라)'; name.autocomplete = 'off';
+  const amt = el('input'); amt.placeholder = '금액 (예: 89800)'; amt.inputMode = 'numeric';
+  for (const i of [name, amt]) Object.assign(i.style, { display: 'block', width: '100%', boxSizing: 'border-box', fontSize: '17px', padding: '10px', margin: '8px 0', border: '1px solid var(--line, #ccc)', borderRadius: '8px' });
+  const msg = el('p', 'status');
+  const ok = el('button', 'btn', '입력'); ok.style.fontSize = '16px'; ok.style.padding = '8px 18px';
+  const cancel = el('button', 'btn', '닫기'); cancel.style.marginLeft = '8px'; cancel.onclick = closeModal;
+  ok.onclick = async () => {
+    const sender = name.value.trim(); const amount = Number(amt.value.replace(/[^0-9]/g, ''));
+    if (!sender || !amount) { msg.textContent = '입금자와 금액을 모두 넣어 주세요.'; return; }
+    if (!confirm(`${sender} ${won(amount)} 입금을 넣을까요?`)) return;
+    ok.disabled = true; msg.textContent = '확인 중…';
+    const r = await adminFetch('api/deposits/manual', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sender, amount }) });
+    ok.disabled = false;
+    if (!r) { msg.textContent = ''; return; }
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { msg.textContent = '실패: ' + (j.error || r.status); return; }
+    msg.textContent = '✅ 입력했습니다. ' + ({ full: '이름·금액이 일치하는 주문이 있어요. 목록에서 주문확인을 눌러 처리하세요.', name: '이름만 일치하는 주문이 있어요.', amount: '금액만 일치하는 주문이 있어요.', other: '이미 처리된 주문과 일치해요.' }[j.match_level] || '일치하는 주문이 없어요. 목록에서 확인하세요.');
+    name.value = ''; amt.value = '';
+    load();
+  };
+  sheet.append(name, amt, ok, cancel, msg);
+  requestAnimationFrame(() => { $('modal').classList.add('open'); name.focus(); });
+};
 async function openMatch(d) {
   const r = await adminFetch(`api/deposits/${d.id}/matches`);
   if (!r) return;
