@@ -46,6 +46,7 @@ async function orderDateRows({ field, from, to, q, done }) {
 // 반환: 자동 처리한 주문번호, 아니면 null(후보가 없거나 여러 건이거나 금액이 정확히 같지 않으면 사람이 확인)
 async function autoProcess(row) {
   if (!AUTO_PROCESS || !shop || !ADMIN_TOKEN) return null;
+  if (String(row.sender || '').startsWith('[테스트]')) return null; // 가짜 입금은 절대 자동 처리하지 않는다
   const related = await shop.relatedFor({ sender: row.sender, amount: row.amount });
   if (related.full.length !== 1) return null;
   const o = related.full[0];
@@ -170,6 +171,22 @@ const server = http.createServer(async (req, res) => {
       if (!autoOd) broadcast('deposit', { ...row, match_level: await levelOf(row), shop: !!shop && !!ADMIN_TOKEN });
       notifyTelegram(row);
       return json(res, 200, { ok: true, id: row.id, auto_processed: autoOd });
+    }
+
+    // 가짜 입금 테스트(관리자 전용): /test-deposit?token=관리자토큰&amount=1000&sender=테스트
+    // 실제 주문이 처리되지 않도록 자동 처리·텔레그램은 건너뛰고, 입금자 앞에 [테스트] 를 붙이고 메모에 표시한다. 목록에서 선택삭제로 숨기면 된다.
+    if (req.method === 'GET' && url.pathname === '/test-deposit') {
+      res.setHeader('cache-control', 'no-store');
+      const send = (code, h, p) => { res.writeHead(code, { 'content-type': 'text/html; charset=utf-8' }); res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>가짜 입금</title><body style="font:17px/1.6 -apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif;padding:20px;max-width:560px;margin:0 auto"><h2>${h}</h2><p>${p}</p></body>`); };
+      if (!isAdmin(req, url)) return send(401, '❌ 관리자 토큰이 필요합니다', '주소 끝의 <code>?token=</code> 뒤에 ADMIN_TOKEN 을 넣어 주세요.');
+      const q = url.searchParams;
+      const amount = Number(q.get('amount') || 1000);
+      if (!Number.isInteger(amount) || amount <= 0 || amount > 100_000_000) return send(400, '❌ 금액이 올바르지 않습니다', '');
+      const name = (q.get('sender') || '가짜입금').replace(/[<>&"']/g, '').slice(0, 20);
+      const row = db.add({ amount, sender: `[테스트]${name}`, balance: null, raw: `[테스트] 가짜 입금 ${amount}원 ${name} ${Date.now()}` });
+      db.setMemo(row.id, '가짜 입금(테스트) · 실제 입금 아님');
+      broadcast('deposit', { ...db.get(row.id), match_level: null, shop: false });
+      return send(200, '✅ 가짜 입금을 만들었습니다', `[테스트]${name} · ${amount.toLocaleString('ko-KR')}원<br>목록과 폰/iPhone 알림을 확인하세요. 자동 처리는 하지 않습니다. 확인 후 목록에서 <b>선택삭제</b>로 숨기면 됩니다.<br>이 페이지를 새로고침하면 한 건 더 만들어집니다.`);
     }
 
     // 앱의 '연결 테스트'용. 토큰만 확인하고 아무것도 저장하지 않는다.
