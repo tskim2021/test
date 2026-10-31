@@ -41,7 +41,6 @@
   .compact #ordDrawer { left:0 !important; right:0; top:0; bottom:0; width:auto; border-radius:0; border:0; }
   .ordSum { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:4px 0 6px; }
   .ordSum div { border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:12px; color:var(--muted); line-height:1.35; }
-  .smsToggle { border:0; background:none; color:var(--rate); font:inherit; font-size:13px; cursor:pointer; padding:0 0 0 8px; }
   .smsWrap { margin:10px 0 4px; } .smsWrap .sec { font-size:13px; color:var(--muted); margin-bottom:4px; }
   .smsBox { display:inline-block; max-width:320px; background:#e9e9eb; color:#111; border-radius:18px; padding:10px 14px; font-size:14px; line-height:1.45; white-space:pre-line; overflow-wrap:anywhere; }
   @media (prefers-color-scheme: dark) { .smsBox { background:#2c313a; color:#e8eaed; } }
@@ -510,11 +509,8 @@ function renderRow(d) {
   if (mp) main.append(mp.link);
   if (d.order_id && !COMPACT) {
     const ol = document.createElement('div'); ol.className = 'ordline'; ol.textContent = `주문 ${d.order_id}`;
-    // 처리된 입금: 들어온 문자 원문을 펼쳐 볼 수 있게
-    const sb = el('button', 'smsToggle', '📩 입금 문자 보기'); let box = null;
-    sb.onclick = (e) => { e.stopPropagation(); if (box) { box.remove(); box = null; sb.textContent = '📩 입금 문자 보기'; } else { box = smsBlock(d.raw); sb.after(box); sb.textContent = '📩 입금 문자 접기'; } };
-    ol.append(' ', sb);
-    main.append(ol, itemsBlock(d.order_items || [], false));
+    // 처리된 입금: 들어온 문자 원문을 늘 함께 보여준다
+    main.append(ol, smsBlock(d.raw), itemsBlock(d.order_items || [], false));
   }
 
   // 금액 칸: 금액 / 처리 방식 뱃지 / 달러·적용환율(처리된 주문)
