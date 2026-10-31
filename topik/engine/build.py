@@ -19,7 +19,7 @@ def R(x):
     if lang=='th': return lookup(x['en'],TH,False)
     if lang=='ms': return lookup(x['en'],MS,True)
 strip=lambda h:re.sub(r'<[^>]+>','',h)
-LES=LESSONS[n]; GAPS=2.0 if n in (10,20) else 2.5
+LES=LESSONS[n]; GAPS=float(os.environ.get('GAPS',2.0 if n in (10,20) else 2.5))
 LEAD,PAD,TAIL=0.5,0.2,0.4
 
 def load(path,tempo):
