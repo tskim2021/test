@@ -41,6 +41,11 @@
   .compact #ordDrawer { left:0 !important; right:0; top:0; bottom:0; width:auto; border-radius:0; border:0; }
   .ordSum { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:4px 0 6px; }
   .ordSum div { border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:12px; color:var(--muted); line-height:1.35; }
+  .smsToggle { border:0; background:none; color:var(--rate); font:inherit; font-size:13px; cursor:pointer; padding:0 0 0 8px; }
+  .smsWrap { margin:10px 0 4px; } .smsWrap .sec { font-size:13px; color:var(--muted); margin-bottom:4px; }
+  .smsBox { display:inline-block; max-width:320px; background:#e9e9eb; color:#111; border-radius:18px; padding:10px 14px; font-size:14px; line-height:1.45; white-space:pre-line; overflow-wrap:anywhere; }
+  @media (prefers-color-scheme: dark) { .smsBox { background:#2c313a; color:#e8eaed; } }
+  .smsBox.none { background:transparent; border:1px dashed var(--line); color:var(--muted); }
   .ordSum b { display:block; font-size:16px; color:var(--text); } .ordSum small { display:block; margin-top:2px; font-size:11px; color:var(--muted); } .ordSum .p b { color:#d97706; } .ordSum .d b { color:var(--accent); }
   #ordList li { cursor:pointer; border-radius:8px; } #ordList li:hover { background:var(--chip); }
   #ordList li.sel { background:color-mix(in srgb, var(--accent) 12%, transparent); }
@@ -505,6 +510,10 @@ function renderRow(d) {
   if (mp) main.append(mp.link);
   if (d.order_id && !COMPACT) {
     const ol = document.createElement('div'); ol.className = 'ordline'; ol.textContent = `주문 ${d.order_id}`;
+    // 처리된 입금: 들어온 문자 원문을 펼쳐 볼 수 있게
+    const sb = el('button', 'smsToggle', '📩 입금 문자 보기'); let box = null;
+    sb.onclick = (e) => { e.stopPropagation(); if (box) { box.remove(); box = null; sb.textContent = '📩 입금 문자 보기'; } else { box = smsBlock(d.raw); sb.after(box); sb.textContent = '📩 입금 문자 접기'; } };
+    ol.append(' ', sb);
     main.append(ol, itemsBlock(d.order_items || [], false));
   }
 
@@ -540,6 +549,14 @@ function renderRow(d) {
 }
 
 // 처리 완료된 입금의 상세(앱에서 행을 눌렀을 때): 일시, 달러/환율, 상품(이미지·옵션), 메모
+// 입금이 들어온 원문(카카오뱅크 문자/알림)을 문자 말풍선처럼 보여준다. 저장된 원문은 줄바꿈이 합쳐져 있어 항목별로 다시 나눈다.
+function smsBlock(raw) {
+  const w = el('div', 'smsWrap'); w.append(el('div', 'sec', '입금 문자(원문)'));
+  const t = String(raw || '');
+  if (!t || /^\[(직접입력|테스트)\]/.test(t)) { w.append(el('div', 'smsBox none', t.startsWith('[테스트]') ? '테스트로 만든 가짜 입금입니다' : '직접 입력한 입금이라 문자 원문이 없습니다')); return w; }
+  const lines = t.replace(/\s*(\[카카오뱅크\]|\d{1,2}\/\d{1,2} \d{1,2}:\d{2}|(?:입금|출금) [\d,]+원|잔액 [\d,]+원)\s*/g, '\n$1\n').replace(/\n+/g, '\n').trim();
+  w.append(el('div', 'smsBox', lines)); return w;
+}
 function openDetail(d) {
   const sheet = $('sheet'); sheet.replaceChildren();
   sheet.append(el('h2', '', `${d.sender || '(입금자 미확인)'} · ${won(d.amount)}`));
@@ -556,6 +573,7 @@ function openDetail(d) {
     if (rateNow) add('적용 환율', `${rateNow.toLocaleString('ko-KR')}원 / $1`);
   }
   sheet.append(dl);
+  sheet.append(smsBlock(d.raw));
   sheet.append(itemsBlock(d.order_items || [], true));
   if (adminEnabled) {
     const memoBox = el('div', 'memobox'); memoBox.append(el('div', 'sec', '메모 / 처리 사유'));
@@ -986,6 +1004,7 @@ async function openMatch(d) {
   const data = await r.json();
   const rel = data.related || { name: [], amount: [], other: [] };
   sheet.append(el('h2', '', `${d.sender || '(입금자 미확인)'} · ${won(d.amount)}`), el('div', 'sub', '최근 60일 주문 기준'));
+  sheet.append(smsBlock(d.raw));
   const memoBox = el('div', 'memobox');
   memoBox.append(el('div', 'sec', '메모 / 처리 사유'));
   const memoTa = document.createElement('textarea'); memoTa.maxLength = 500; memoTa.value = data.deposit.memo || '';
