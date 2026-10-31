@@ -30,7 +30,15 @@
     body:not(.compact) #ordPanel { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; }
   }
   @media (max-width:1099px) { #ordPanel { margin-bottom:12px; } #ordList { max-height:50vh; overflow:auto; } }
-  .compact #ordPanel, .compact #ordDrawer { display:none !important; }
+  /* 앱(compact): 위쪽 탭으로 입금 내역 / 무통장 주문 전환, 상세는 전체 화면 */
+  .appTabs { display:none; }
+  .compact .appTabs:not([hidden]) { display:flex; gap:6px; margin:0 0 10px; position:sticky; top:0; z-index:20; background:var(--bg); padding:6px 0; }
+  .appTabs button { flex:1; font:inherit; font-size:15px; font-weight:600; padding:9px 0; border-radius:10px; border:1px solid var(--line); background:var(--card); color:var(--text); }
+  .appTabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .compact:not(.ordMode) #ordPanel { display:none !important; }
+  .compact.ordMode #content { display:none; }
+  .compact #ordList { max-height:none; }
+  .compact #ordDrawer { left:0 !important; right:0; top:0; bottom:0; width:auto; border-radius:0; border:0; }
   .ordSum { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:4px 0 6px; }
   .ordSum div { border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:12px; color:var(--muted); line-height:1.35; }
   .ordSum b { display:block; font-size:16px; color:var(--text); } .ordSum small { display:block; margin-top:2px; font-size:11px; color:var(--muted); } .ordSum .p b { color:#d97706; } .ordSum .d b { color:var(--accent); }
@@ -254,6 +262,7 @@
   <button id="loginBtn">접속</button>
 </div>
 <main id="app" hidden>
+<div class="appTabs" id="appTabs" hidden><button class="on" data-t="dep">입금 내역</button><button data-t="ord">무통장 주문</button></div>
 <aside id="ordPanel" hidden>
   <div class="card">
     <div class="ordHead"><b>무통장 미입금 주문</b> <span id="ordCount" class="status"></span></div>
@@ -704,6 +713,7 @@ async function load() {
   shopEnabled = !!data.shop;
   lastDeposits = data.deposits || [];
   if (!ord.loaded && shopEnabled && !COMPACT) { ord.loaded = true; setTimeout(loadOrders, 0); }
+  $('appTabs').hidden = !(COMPACT && shopEnabled);
   shopCurrency = data.currency || null;
   rateNow = data.rate && data.rate.rate ? data.rate.rate : null;
   $('list').classList.toggle('shop', shopEnabled);
@@ -829,7 +839,7 @@ $('manualBtn').onclick = () => {
 
 function ordRange(back) { const t = todayStr(); ord.to = back === 1 ? ymd(new Date(kstNow() - DAY)) : t; ord.from = ymd(new Date(kstNow() - back * DAY)); }
 async function loadOrders() {
-  if (COMPACT || !shopEnabled) return;
+  if (!shopEnabled || (COMPACT && !document.body.classList.contains('ordMode'))) return;
   $('ordPanel').hidden = false;
   if (!ord.from) ordRange(0); // 처음엔 오늘 주문
   $('ordFrom').value = ord.from; $('ordTo').value = ord.to;
@@ -885,10 +895,19 @@ function placeDrawer() {
   const r = $('ordPanel').getBoundingClientRect();
   $('ordDrawer').style.left = Math.max(8, Math.min(r.right + 12, window.innerWidth - 448)) + 'px';
 }
-function closeOrder() { ord.sel = null; $('ordDrawer').classList.remove('open'); setTimeout(() => { if (!ord.sel) $('ordDrawer').hidden = true; }, 200); document.querySelectorAll('#ordList li.sel').forEach((x) => x.classList.remove('sel')); }
-$('dClose').onclick = closeOrder;
+function closeOrder(fromPop) { if (!fromPop && COMPACT && history.state && history.state.d) { history.back(); return; } ord.sel = null; $('ordDrawer').classList.remove('open'); setTimeout(() => { if (!ord.sel) $('ordDrawer').hidden = true; }, 200); document.querySelectorAll('#ordList li.sel').forEach((x) => x.classList.remove('sel')); }
+$('dClose').onclick = () => closeOrder();
+window.addEventListener('popstate', () => { if (ord.sel) closeOrder(true); }); // 앱: 폰의 뒤로 가기로 상세 닫기
+document.querySelectorAll('#appTabs button').forEach((bt) => { bt.onclick = () => {
+  const o = bt.dataset.t === 'ord';
+  document.querySelectorAll('#appTabs button').forEach((x) => x.classList.toggle('on', x === bt));
+  document.body.classList.toggle('ordMode', o);
+  if (o) { ord.loaded = true; loadOrders(); } else { load(); }
+  window.scrollTo(0, 0);
+}; });
 window.addEventListener('resize', () => { if (ord.sel) placeDrawer(); });
 async function openOrder(o, j, li) {
+  if (COMPACT && !(history.state && history.state.d)) history.pushState({ d: 1 }, '');
   ord.sel = o.od_id;
   document.querySelectorAll('#ordList li.sel').forEach((x) => x.classList.remove('sel')); li.classList.add('sel');
   const krwAmt = o.od_misu_krw ?? o.od_misu;
