@@ -10,6 +10,27 @@
   * { box-sizing: border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; }
   main { max-width:1200px; margin:0 auto; padding:16px 12px 48px; } /* 최대 1200px, 그보다 좁은 화면은 꽉 채움 */
+  /* 왼쪽: 무통장 미입금 주문(쇼핑몰 연동 + PC 화면). 넓은 화면에서만 옆에, 좁으면 위에, 앱(compact)에서는 숨김 */
+  #ordPanel .card { padding:12px 12px 6px; }
+  .ordHead { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; font-size:16px; }
+  .ordQuick { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; } .ordQuick .chip { padding:4px 12px; font-size:13px; }
+  .ordDates { display:flex; gap:6px; align-items:center; margin-bottom:6px; } .ordDates input { flex:1; padding:6px 6px; font-size:13px; }
+  #ordInfo { margin:2px 2px 6px; }
+  #ordList { list-style:none; margin:0; padding:0; }
+  #ordList li { border-top:1px solid var(--line); padding:10px 2px; }
+  #ordList .o1 { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+  #ordList .nm { font-weight:700; font-size:15px; overflow-wrap:anywhere; }
+  #ordList .krw { font-weight:700; font-size:16px; white-space:nowrap; }
+  #ordList .o2 { display:flex; justify-content:space-between; gap:8px; font-size:12px; color:var(--muted); }
+  #ordList .it { font-size:13px; color:var(--muted); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #ordList .hit { display:inline-block; font-size:11px; padding:1px 6px; border-radius:6px; background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent); margin-left:4px; }
+  #ordList a { color:var(--rate); text-decoration:none; }
+  @media (min-width:1100px) {
+    body:not(.compact) main { max-width:1600px; display:grid; grid-template-columns:360px minmax(0,1fr); gap:20px; align-items:start; }
+    body:not(.compact) #ordPanel { position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto; }
+  }
+  @media (max-width:1099px) { #ordPanel { margin-bottom:12px; } #ordList { max-height:50vh; overflow:auto; } }
+  .compact #ordPanel { display:none !important; }
   header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
   h1 { font-size:20px; margin:0; }
   .status { font-size:13px; color:var(--muted); }
@@ -210,6 +231,18 @@
   <button id="loginBtn">접속</button>
 </div>
 <main id="app" hidden>
+<aside id="ordPanel" hidden>
+  <div class="card">
+    <div class="ordHead"><b>무통장 미입금 주문</b> <span id="ordCount" class="status"></span></div>
+    <div class="ordQuick">
+      <button class="chip" data-o="0">오늘</button><button class="chip" data-o="1">어제</button><button class="chip" data-o="6">7일</button><button class="chip" data-o="29">30일</button>
+    </div>
+    <div class="ordDates"><input type="date" id="ordFrom"> <span class="sep">~</span> <input type="date" id="ordTo"> <button class="btn" id="ordGo">검색</button></div>
+    <div id="ordInfo" class="status"></div>
+    <ul id="ordList"></ul>
+  </div>
+</aside>
+<div id="content">
   <header>
     <h1>실시간 입금 내역</h1>
     <div class="status"><span class="dot" id="dot"></span><span id="statusText">연결 중…</span></div>
@@ -293,6 +326,7 @@
     <span id="pageInfo">1 / 1</span>
     <button id="next">다음</button>
   </div>
+</div>
 </main>
 <div id="modal"><div class="sheet" id="sheet"></div></div>
 <script>
@@ -319,6 +353,8 @@ let adminToken = localStorage.getItem('adminToken') || '';
 
 // ---- 날짜 계산 (한국시간 기준 'YYYY-MM-DD') ----
 const DAY = 86400000;
+let lastDeposits = []; // 지금 목록의 입금(왼쪽 주문 목록의 '입금 있음' 표시용)
+const ord = { from: '', to: '', loaded: false, seq: 0 }; // 왼쪽 무통장 주문 목록 상태
 const kstNow = () => new Date(Date.now() + 9 * 3600000);
 const ymd = (d) => d.toISOString().slice(0, 10);
 const addDays = (s, n) => ymd(new Date(Date.parse(s + 'T00:00:00Z') + n * DAY));
@@ -621,7 +657,7 @@ function beep() {
 function syncControls() {
   $('from').value = state.from; $('to').value = state.to;
   $('limit').value = String(state.limit); $('q').value = state.q; $('datefield').value = state.datefield; $('doneOnly').checked = state.done;
-  document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c.dataset.range === state.range));
+  document.querySelectorAll('.chip[data-range]').forEach((c) => c.classList.toggle('active', c.dataset.range === state.range));
 }
 function sumCaption() {
   const fld = state.datefield === 'order' ? '주문일자 ' : state.datefield === 'all' ? '전체(주문·결제) ' : '';
@@ -641,6 +677,8 @@ async function load() {
   if (!r.ok || seq !== reqSeq) return;
   const data = await r.json();
   shopEnabled = !!data.shop;
+  lastDeposits = data.deposits || [];
+  if (!ord.loaded && shopEnabled && !COMPACT) { ord.loaded = true; setTimeout(loadOrders, 0); }
   shopCurrency = data.currency || null;
   rateNow = data.rate && data.rate.rate ? data.rate.rate : null;
   $('list').classList.toggle('shop', shopEnabled);
@@ -683,8 +721,9 @@ function connect() {
   es = new EventSource('events?token=' + encodeURIComponent(token));
   es.onopen = () => { $('dot').classList.add('on'); $('statusText').textContent = '실시간 연결됨'; };
   es.onerror = () => { $('dot').classList.remove('on'); $('statusText').textContent = '재연결 중…'; };
-  es.addEventListener('processed', () => { load(); }); // 다른 곳에서 처리되면 목록을 새로 고친다
+  es.addEventListener('processed', () => { load(); if (ord.loaded) loadOrders(); }); // 다른 곳에서 처리되면 목록을 새로 고친다
   es.addEventListener('deposit', (e) => {
+    if (ord.loaded) setTimeout(loadOrders, 800);
     highlightId = JSON.parse(e.data).id;
     beep();
     // '오늘/이번주'처럼 이름 있는 기간은 날짜가 바뀌었을 수 있어 다시 계산한다.
@@ -761,6 +800,53 @@ $('manualBtn').onclick = () => {
   sheet.append(name, amt, ok, cancel, msg);
   requestAnimationFrame(() => { $('modal').classList.add('open'); name.focus(); });
 };
+// ---- 왼쪽: 쇼핑몰 무통장 미입금 주문(주문일자 기간) ----
+
+function ordRange(back) { const t = todayStr(); ord.to = back === 1 ? ymd(new Date(kstNow() - DAY)) : t; ord.from = ymd(new Date(kstNow() - back * DAY)); }
+async function loadOrders() {
+  if (COMPACT || !shopEnabled) return;
+  $('ordPanel').hidden = false;
+  if (!ord.from) ordRange(6);
+  $('ordFrom').value = ord.from; $('ordTo').value = ord.to;
+  document.querySelectorAll('.ordQuick .chip').forEach((b) => {
+    const n = Number(b.dataset.o), t = todayStr();
+    const f = ymd(new Date(kstNow() - n * DAY)), to = n === 1 ? f : t;
+    b.classList.toggle('active', ord.from === f && ord.to === to);
+  });
+  const seq = ++ord.seq;
+  $('ordInfo').textContent = '불러오는 중…';
+  const r = await adminFetch(`api/orders/unpaid?from=${ord.from}&to=${ord.to}`);
+  if (seq !== ord.seq) return;
+  if (!r) { $('ordInfo').textContent = '관리자 토큰이 필요합니다.'; return; }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) { $('ordInfo').textContent = '조회 실패: ' + (j.error || r.status); return; }
+  const list = j.orders || [];
+  const krw = (o) => (o.od_misu_krw ?? o.od_misu);
+  // 지금 목록에 있는 미처리 입금 중 이름·금액이 맞는 주문 표시
+  const pend = (lastDeposits || []).filter((d) => !d.order_id);
+  const nm = (x) => String(x || '').replace(/\s/g, '');
+  const total = list.reduce((a, o) => a + krw(o), 0);
+  $('ordCount').textContent = `${list.length}건 · ${won(total)}`;
+  const others = (j.settle_cases || []).filter((c) => !/무통장/.test(c.s));
+  $('ordInfo').textContent = list.length ? '주문일자 기준 · 최근 주문이 위' : '이 기간에 무통장 미입금 주문이 없습니다.' + (others.length ? ` (입금 전 주문의 결제수단: ${others.map((c) => `${c.s} ${c.n}건`).join(', ')})` : '');
+  const ul = $('ordList'); ul.replaceChildren();
+  for (const o of list) {
+    const li = el('li');
+    const who = o.od_deposit_name && nm(o.od_deposit_name) !== nm(o.od_name) ? `${o.od_deposit_name} (주문자 ${o.od_name})` : (o.od_deposit_name || o.od_name || '-');
+    const top = el('div', 'o1'); const n = el('span', 'nm', who);
+    if (pend.some((d) => nm(d.sender) && (nm(d.sender) === nm(o.od_deposit_name) || nm(d.sender) === nm(o.od_name)) && Math.abs(d.amount - krw(o)) <= 100)) n.append(el('span', 'hit', '입금 있음'));
+    top.append(n, el('span', 'krw', won(krw(o))));
+    const mid = el('div', 'o2');
+    const a = el('a', null, o.od_id); a.href = (j.admin_url || '') + encodeURIComponent(o.od_id); a.target = '_blank'; a.rel = 'noopener'; a.title = '쇼핑몰 관리자에서 주문 보기';
+    mid.append(el('span', null, String(o.od_time || '').slice(5, 16)), a);
+    li.append(top, mid);
+    if (o.items && o.items.length) li.append(el('div', 'it', o.items[0].name + (o.items.length > 1 ? ` 외 ${o.items.length - 1}건` : '')));
+    if (o.od_misu_krw != null && j.rate) li.append(el('div', 'o2', `$${o.od_misu} × ${Number(j.rate).toLocaleString('ko-KR')}`));
+    ul.append(li);
+  }
+}
+document.querySelectorAll('.ordQuick .chip').forEach((b) => { b.onclick = () => { ordRange(Number(b.dataset.o)); loadOrders(); }; });
+$('ordGo').onclick = () => { const f = $('ordFrom').value, t = $('ordTo').value; if (!f || !t) return; ord.from = f <= t ? f : t; ord.to = f <= t ? t : f; loadOrders(); };
 async function openMatch(d) {
   const r = await adminFetch(`api/deposits/${d.id}/matches`);
   if (!r) return;
@@ -900,7 +986,7 @@ async function confirmOrder(d, o, btn, card, memoTa, mode) {
 }
 
 // ---- 이벤트 ----
-document.querySelectorAll('.chip').forEach((c) => c.onclick = () => setRange(c.dataset.range));
+document.querySelectorAll('.chip[data-range]').forEach((c) => c.onclick = () => setRange(c.dataset.range));
 for (const id of ['from', 'to']) {
   $(id).onchange = () => { state[id] = $(id).value; state.range = ''; state.page = 1; load(); };
 }

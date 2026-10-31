@@ -192,6 +192,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { ok: true, id: row.id, match_level: level });
     }
 
+    // 무통장 미입금 주문 목록(관리자 전용, 대시보드 왼쪽): /api/orders/unpaid?from=YYYY-MM-DD&to=YYYY-MM-DD (주문일자 기준)
+    if (req.method === 'GET' && url.pathname === '/api/orders/unpaid') {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      if (!shop) return json(res, 200, { shop: false, orders: [] });
+      const from = url.searchParams.get('from'), to = url.searchParams.get('to');
+      if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: '날짜 형식은 YYYY-MM-DD' });
+      const r = await shop.unpaidOrders(from, to);
+      return json(res, 200, { shop: true, currency: shop.currency, admin_url: `${shop.shopUrl}/adm/shop_admin/orderform.php?od_id=`, ...r });
+    }
+
     // 가짜 입금 테스트(관리자 전용): /test-deposit?token=관리자토큰&amount=1000&sender=테스트
     // 실제 주문이 처리되지 않도록 자동 처리·텔레그램은 건너뛰고, 입금자 앞에 [테스트] 를 붙이고 메모에 표시한다. 목록에서 선택삭제로 숨기면 된다.
     if (req.method === 'GET' && url.pathname === '/test-deposit') {

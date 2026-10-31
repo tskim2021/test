@@ -221,6 +221,7 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
   return {
     close: () => pool.end(),
     currency,
+    shopUrl,
     statusPaid,
     getRate,
     // 연결 확인용: 주문 테이블 건수
@@ -245,6 +246,25 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
         time: o.od_time, // 주문 일시(쇼핑몰 한국시간 문자열)
         usd: num(o.od_receipt_price) > 0 ? num(o.od_receipt_price) : num(o.od_misu) > 0 ? num(o.od_misu) : orderTotal(o),
       }]));
+    },
+    // 무통장 미입금 주문(주문 상태 '주문', 결제수단에 '무통장' 포함, 미수금 > 0). from/to 는 주문일자 'YYYY-MM-DD'(한국시간).
+    // settle_cases: 같은 기간 '주문' 상태 주문의 결제수단별 건수(무통장 주문이 0건일 때 왜 그런지 보여주기 위함).
+    async unpaidOrders(from, to) {
+      const rate = (await getRate())?.rate || null;
+      const where = ["od_status = '주문'"];
+      const args = [];
+      if (from) { where.push('od_time >= ?'); args.push(`${from} 00:00:00`); }
+      if (to) { where.push('od_time <= ?'); args.push(`${to} 23:59:59`); }
+      const [rows] = await pool.query(`SELECT ${COLS} FROM ${O} WHERE ${where.join(' AND ')} ORDER BY od_time DESC LIMIT 2000`, args);
+      const counts = {};
+      for (const o of rows) counts[o.od_settle_case || '(없음)'] = (counts[o.od_settle_case || '(없음)'] || 0) + 1;
+      const bank = rows.filter((o) => /무통장/.test(o.od_settle_case || '') && num(o.od_misu) > 0).slice(0, 500);
+      const items = await itemsOf(bank.map((o) => o.od_id));
+      return {
+        orders: bank.map((o) => shapeOrder(o, items, rate)),
+        settle_cases: Object.entries(counts).map(([s, n]) => ({ s, n })).sort((a, b) => b.n - a.n),
+        rate,
+      };
     },
     // 주문일자(쇼핑몰 주문 시각, 한국시간 문자열) 기간의 주문. from/to 는 'YYYY-MM-DD'.
     async ordersInRange(from, to) {
