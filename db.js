@@ -111,6 +111,11 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     setMemo: (id, memo) => memoStmt.run(String(memo), id).changes === 1,
     release: (depositId) => releaseStmt.run(depositId),
     matchedOrder: (depositId) => matchOf.get(depositId)?.od_id ?? null,
+    // 주문번호 목록 중 입금 모니터가 자동 처리(manual=0)한 것
+    autoProcessed(odIds) {
+      if (!odIds.length) return new Set();
+      return new Set(db.prepare('SELECT od_id FROM matches WHERE manual = 0 AND od_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(odIds)).map((r) => r.od_id));
+    },
     // 주문일자 검색용: 이름/금액/연결 주문번호 중 하나라도 걸리는 입금(숨김 제외)을 전부 돌려준다(페이지 처리는 호출 쪽에서).
     candidates({ q, names = [], ranges = [], odIds = [], done = 'all', limit = 5000 } = {}) {
       const where = ['d.hidden = 0'];

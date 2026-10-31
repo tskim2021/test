@@ -33,7 +33,7 @@
   .compact #ordPanel, .compact #ordDrawer { display:none !important; }
   .ordSum { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin:4px 0 6px; }
   .ordSum div { border:1px solid var(--line); border-radius:8px; padding:6px 8px; font-size:12px; color:var(--muted); line-height:1.35; }
-  .ordSum b { display:block; font-size:16px; color:var(--text); } .ordSum .p b { color:#d97706; } .ordSum .d b { color:var(--accent); }
+  .ordSum b { display:block; font-size:16px; color:var(--text); } .ordSum small { display:block; margin-top:2px; font-size:11px; color:var(--muted); } .ordSum .p b { color:#d97706; } .ordSum .d b { color:var(--accent); }
   #ordList li { cursor:pointer; border-radius:8px; } #ordList li:hover { background:var(--chip); }
   #ordList li.sel { background:color-mix(in srgb, var(--accent) 12%, transparent); }
   #ordDrawer { position:fixed; top:12px; bottom:12px; width:440px; background:var(--card); border:1px solid var(--line); border-radius:12px;
@@ -853,8 +853,12 @@ async function loadOrders() {
   const total = list.reduce((a, o) => a + krw(o), 0);
   $('ordCount').textContent = `${list.length}건 · ${won(total)}`;
   const sm = j.summary;
-  $('ordSum').replaceChildren(...(sm ? [['전체 무통장', sm.total, ''], ['미처리', sm.pending, 'p'], ['처리완료', sm.done, 'd']].map(([t, v, c]) => {
-    const d = el('div', c); d.append(t, el('b', null, `${v.count}건`), won(v.amount)); return d;
+  const split = (dn) => dn && dn.auto ? `자동 ${dn.auto.count} · 수동 ${dn.manual.count}` : '';
+  $('ordSum').replaceChildren(...(sm ? [['전체 무통장', sm.total, '', split(sm.done)], ['미처리', sm.pending, 'p', ''], ['처리완료', sm.done, 'd', split(sm.done)]].map(([t, v, c, sub]) => {
+    const d = el('div', c); d.append(t, el('b', null, `${v.count}건`), won(v.amount));
+    if (sub) d.append(el('small', null, sub));
+    if (c === 'd' && v.auto) d.title = `자동처리 ${v.auto.count}건 ${won(v.auto.amount)}\n수동처리 ${v.manual.count}건 ${won(v.manual.amount)}`;
+    return d;
   }) : []));
   const others = (j.settle_cases || []).filter((c) => !/무통장/.test(c.s));
   $('ordInfo').textContent = list.length ? '주문일자 기준 · 최근 주문이 위' : '이 기간에 무통장 미입금 주문이 없습니다.' + (others.length ? ` (입금 전 주문의 결제수단: ${others.map((c) => `${c.s} ${c.n}건`).join(', ')})` : '');

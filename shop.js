@@ -265,16 +265,19 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       const sa = [];
       if (from) { sw.push('od_time >= ?'); sa.push(`${from} 00:00:00`); }
       if (to) { sw.push('od_time <= ?'); sa.push(`${to} 23:59:59`); }
-      const [all] = await pool.query(`SELECT od_status, od_misu, od_receipt_price FROM ${O} WHERE ${sw.join(' AND ')}`, sa);
+      const [all] = await pool.query(`SELECT od_id, od_status, od_misu, od_receipt_price FROM ${O} WHERE ${sw.join(' AND ')}`, sa);
       const krw = (v) => (rate ? krwOf(v, rate) : num(v));
       const summary = { total: { count: 0, amount: 0 }, pending: { count: 0, amount: 0 }, done: { count: 0, amount: 0 } };
+      const doneList = []; // 처리완료 주문(자동/수동 구분은 입금 모니터 DB 기준으로 서버에서)
       for (const o of all) {
         const k = o.od_status === '주문' ? 'pending' : 'done';
         const a = krw(k === 'pending' ? o.od_misu : o.od_receipt_price);
         summary[k].count++; summary[k].amount += a; summary.total.count++; summary.total.amount += a;
+        if (k === 'done') doneList.push({ od_id: String(o.od_id), amount: a });
       }
       return {
         summary,
+        done_list: doneList,
         orders: bank.map((o) => shapeOrder(o, items, rate)),
         settle_cases: Object.entries(counts).map(([s, n]) => ({ s, n })).sort((a, b) => b.n - a.n),
         rate,

@@ -198,7 +198,12 @@ const server = http.createServer(async (req, res) => {
       if (!shop) return json(res, 200, { shop: false, orders: [] });
       const from = url.searchParams.get('from'), to = url.searchParams.get('to');
       if ((from && !isDate(from)) || (to && !isDate(to))) return json(res, 400, { error: '날짜 형식은 YYYY-MM-DD' });
-      const r = await shop.unpaidOrders(from, to);
+      const { done_list: doneList, ...r } = await shop.unpaidOrders(from, to);
+      // 처리완료를 자동(입금 모니터가 이름·금액 일치로 처리)과 수동(그 외: 관리자 처리·입금 없이 처리·쇼핑몰에서 직접 처리)으로 나눈다.
+      const autoSet = db.autoProcessed(doneList.map((o) => o.od_id));
+      const auto = { count: 0, amount: 0 }, manual = { count: 0, amount: 0 };
+      for (const o of doneList) { const t = autoSet.has(o.od_id) ? auto : manual; t.count++; t.amount += o.amount; }
+      r.summary.done.auto = auto; r.summary.done.manual = manual;
       return json(res, 200, { shop: true, currency: shop.currency, admin_url: `${shop.shopUrl}/adm/shop_admin/orderform.php?od_id=`, ...r });
     }
 
