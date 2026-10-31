@@ -37,6 +37,15 @@ final class SmsPick {
         return c.getTimeInMillis();
     }
 
+    private static final Pattern KEY = Pattern.compile("(\\d{1,2}/\\d{1,2}\\s+\\d{1,2}:\\d{2}).*?입금\\s*([\\d,]+)\\s*원\\s*([^\\s]*)");
+
+    /** 같은 입금 문자인지 판단하는 키(시각·금액·입금자). 문자 앱 알림과 직접 수신의 앞머리([Web발신] 등)가 달라도 같게 나온다. */
+    static String key(String t) {
+        String n = norm(t);
+        Matcher m = KEY.matcher(n);
+        return m.find() ? m.group(1).replaceAll("\\s+", " ") + "|" + m.group(2) + "|" + (m.group(3).startsWith("잔액") ? "" : m.group(3)) : n;
+    }
+
     /** 후보 문장들(알림의 메시지별 본문 등)에서 최근 카카오뱅크 입금 문자만 정리해 돌려준다. msgTime: 메시지/알림 시각(ms). */
     static List<String> pick(List<String> texts, List<Long> msgTimes, long now) {
         LinkedHashSet<String> out = new LinkedHashSet<>();

@@ -76,6 +76,7 @@ public class MainActivity extends Activity {
         setContentView(root);
 
         if (configured()) showList(false); else showSettings();
+        if (notifGranted()) askSmsPermission(false); // 알림 권한이 이미 있으면 바로 문자 권한을 묻는다
         askNotificationPermission();
     }
 
@@ -265,6 +266,8 @@ public class MainActivity extends Activity {
         root.addView(button("3) 알림 권한 설정 열기 (푸시가 안 올 때)", v ->
             startActivity(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, getPackageName()))));
 
+        root.addView(button("4) 문자 수신 권한 허용 (입금 문자 직접 받기)", v -> askSmsPermission(true)));
+
         root.addView(text("최근 로그 (길게 눌러 복사 가능)", 13, false));
         logView = new TextView(this);
         logView.setTextSize(12);
@@ -276,6 +279,21 @@ public class MainActivity extends Activity {
         sv.addView(root);
         return sv;
     }
+
+    private boolean smsGranted() { return checkSelfPermission(Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED; }
+
+    /** 문자 직접 수신 권한. 이미 거절했거나 '제한된 설정'으로 막혀 있으면 앱 정보 화면을 연다. */
+    private void askSmsPermission(boolean fromButton) {
+        if (!store.smsMode() || smsGranted()) { if (fromButton) refresh(); return; }
+        if (fromButton && !shouldShowRequestPermissionRationale(Manifest.permission.RECEIVE_SMS) && askedSmsBefore()) {
+            store.log("문자 권한: 앱 정보 → (오른쪽 위 ⋮) 제한된 설정 허용 → 권한 → SMS 허용");
+            startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        getSharedPreferences("deposit-monitor", MODE_PRIVATE).edit().putBoolean("asked_sms", true).apply();
+        requestPermissions(new String[] { Manifest.permission.RECEIVE_SMS }, 2);
+    }
+    private boolean askedSmsBefore() { return getSharedPreferences("deposit-monitor", MODE_PRIVATE).getBoolean("asked_sms", false); }
 
     private boolean notifGranted() {
         return Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED;
@@ -315,7 +333,14 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] perms, int[] results) {
         super.onRequestPermissionsResult(code, perms, results);
+        if (code == 2) {
+            store.log(results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED ? "문자 수신 권한 허용됨 ✅"
+                    : "문자 수신 권한이 거부됨. 설정 탭 '4) 문자 수신 권한 허용'을 눌러 주세요");
+            refresh();
+            return;
+        }
         if (!askedBatteryThisLaunch) { askedBatteryThisLaunch = true; askBatteryExemption(); } // 알림 권한 다음으로 배터리 제외를 묻는다
+        askSmsPermission(false); // 알림 권한 다음으로 문자 권한
         if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED) ensurePush();
         else store.log("알림 권한이 거부되어 푸시를 받을 수 없습니다. 설정 탭의 '3) 알림 권한 설정 열기'에서 허용하세요");
     }
@@ -327,6 +352,7 @@ public class MainActivity extends Activity {
         String warn = url.startsWith("http://") ? "\n⚠ http:// 는 토큰이 암호화되지 않습니다. 가능하면 https 사용" : "";
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
                 + "\n수집 방식: " + (store.smsMode() ? "카카오뱅크 입금 문자" : "카카오뱅크 앱 알림")
+                + (store.smsMode() ? "\n문자 직접 수신: " + (smsGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 4번에서 허용)") : "")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
                 + "\n푸시 연결: " + pushStateText()
                 + "\n마지막 푸시 수신: " + lastPushText()

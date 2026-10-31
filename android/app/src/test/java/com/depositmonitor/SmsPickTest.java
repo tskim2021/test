@@ -44,4 +44,15 @@ public class SmsPickTest {
         assertEquals(kst(2026, 12, 31, 23, 58), SmsPick.bodyTime(sms("12/31 23:58", "1", "a"), now));
         assertEquals(1, SmsPick.pick(Arrays.asList(sms("12/31 23:58", "1,000", "a")), Arrays.asList(now), now).size());
     }
+
+    @Test public void 알림과_직접수신의_같은_문자는_같은_키() {
+        String viaNotif = "[Web발신] [카카오뱅크] 노*유(4063) 10/31 10:05 입금 55,500원 정홍진 잔액 1,000원";
+        String viaSms = "[카카오뱅크]\n노*유(4063)\n10/31 10:05\n입금 55,500원\n정홍진\n잔액 1,000원";
+        assertEquals(SmsPick.key(viaNotif), SmsPick.key(viaSms));
+        assertEquals("10/31 10:05|55,500|정홍진", SmsPick.key(viaSms));
+        // 같은 사람이 다른 금액으로 두 번 → 다른 키
+        assertNotEquals(SmsPick.key(viaSms), SmsPick.key(viaSms.replace("55,500", "33,200")));
+        // 잔액 줄이 없는 문자
+        assertEquals("10/31 16:23|89,640|천봉상", SmsPick.key("[Web발신]\n[카카오뱅크]\n김*희(1526)\n10/31 16:23\n입금 89,640원\n천봉상"));
+    }
 }

@@ -54,7 +54,7 @@ public class NotifListener extends NotificationListenerService {
         texts.add(str(extras.getCharSequence(Notification.EXTRA_TEXT))); times.add(sbn.getPostTime());
 
         for (String t : SmsPick.pick(texts, times, System.currentTimeMillis())) {
-            if (!store.markSent(t)) continue; // 이미 보낸 문자
+            if (!store.markSent(SmsPick.key(t))) continue; // 이미 보낸 문자(직접 수신 경로와 겹쳐도 한 번만)
             store.log("카카오뱅크 문자 수신: " + t);
             Sender.submit(this, "", t);
         }
