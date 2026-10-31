@@ -168,3 +168,104 @@ LESSONS[2]=dict(title="인사",decor="안녕하세요감사",topic=T("greetings"
  quiz(T("Thank you","ありがとう","谢谢"),"감사합니다","gam-sa-ham-ni-da"),
  outro([("안녕하세요",T("Hello","こんにちは","你好"),"an-nyeong-ha-se-yo"),("감사합니다",T("Thank you","ありがとう","谢谢"),"gam-sa-ham-ni-da"),("저는 학생입니다",T("I am a student","私は学生です","我是学生"),"jeo-neun hak-ssaeng-im-ni-da")])])
 LESSONS=dict(sorted(LESSONS.items()))
+
+# ── 11~20강 (1급 후반) + 10강을 '중간 복습'으로 조정
+LESSONS[10].update(title="중간 복습",topic=T("the first review","最初の復習","第一次复习"),sub=T("Review 1 · 복습","復習 1 · 복습","复习 1 · 복습")); LESSONS[10].pop('bye',None); LESSONS[10].pop('next',None)
+LESSONS[11]=BACKLOG_LEVEL2['days']
+G.update(month=T("MONTH","月","月份"),day=T("DAY","日","日"),topicn=T("NOUN + TOPIC","名詞 + は","名词 + 主题助词"),obj=T("OBJECT + 을/를","目的語 + を","宾语 + 을/를"),
+ timew=T("TIME","時","时间"),pastv=T("PAST VERB","過去形","过去式动词"),means=T("MEANS + 로","手段 + 로","方式 + 로"))
+def N(w,s,rule,say,c=None):
+    d=dict(w=f"<span class='hl'>{w}</span>",s=f"<span class='hl'>{s}</span>",rule=rule,say=say)
+    if c: d['c']=c
+    return d
+SIL=T("Silent ㅎ","ㅎは発音しない","ㅎ不发音"); BM=T("ㅂ + ㄴ → ㅁ + ㄴ","ㅂ + ㄴ → ㅁ + ㄴ","ㅂ + ㄴ → ㅁ + ㄴ")
+LESSONS[12]=dict(title="날짜",decor="월일며칠오",topic=T("dates","日付","日期"),sub=T("Dates · 날짜","日付 · 날짜","日期 · 날짜"),scenes=[
+ expr(T("MONTHS · 월","月 · 월","月份 · 월"),"일월, 이월, 삼월.","일월 이월 삼월","일:il 월:wol _ 이:i 월:wol _ 삼:sam 월:wol",S3("1 · 2 · 3"),T("Number + 월 = month","数字 + 월 = 月","数字 + 월 = 月份"),
+  T("Add wol to a Sino-Korean number to say the month. Careful: June and October are irregular.","漢数詞に、월をつけると月になります。注意。六月と十月は不規則です。","汉字词数字加월就是月份。注意，六月和十月是不规则的。"),repeat=True),
+ expr(T("DATE · 날짜","日付 · 날짜","日期 · 날짜"),"오늘은 며칠이에요?","오늘은 며칠이에요?","오:o 늘:neul 은:eun _ 며:myeo 칠:chil 이:i 에:e 요:yo",T("What is the date today?","今日は何日ですか？","今天几号？"),T("Asking the date","日付を聞く","询问日期"),
+  T("Myeochil means what day of the month. Answer with a number plus il.","며칠は「何日」です。数字に、일をつけて答えます。","며칠是“几号”。回答时用数字加일。"),nt=N("며칠이","며치리",LINK,"며치리에요.")),
+ build(T("TODAY · 오늘","今日 · 오늘","今天 · 오늘"),[card("오월","o-wol",G['month'],T("May","5月","五月")),card("오일","o-il",G['day'],T("the 5th","5日","5号")),card("이에요","i-e-yo",G['cop'],T("is","です","是"))],
+  dict(ko="오월 오일이에요.",rom="o-wol o-i-ri-e-yo",loc=T("It is May 5th.","5月5日です。","是五月五号。"),say="오월 오일이에요."),
+  T("Month first, then day. Korean dates go from big to small.","月、日の順に言います。韓国語は、大きい単位から言います。","先说月，再说日。韩语的日期从大到小。")),
+ quiz(T("What is the date today?","今日は何日ですか？","今天几号？"),"오늘은 며칠이에요?","o-neu-reun myeo-chi-ri-e-yo"),
+ outro([("일월 이월 삼월",T("Jan · Feb · Mar","1月 · 2月 · 3月","一月 · 二月 · 三月"),"il-wol i-wol sam-wol"),("오늘은 며칠이에요?",T("What is the date today?","今日は何日ですか？","今天几号？"),"o-neu-reun myeo-chi-ri-e-yo"),("오월 오일이에요",T("It is May 5th","5月5日です","是五月五号"),"o-wol o-i-ri-e-yo")])])
+LESSONS[13]=dict(title="가족",decor="아버지어머니가",topic=T("family","家族","家人"),sub=T("Family · 가족","家族 · 가족","家人 · 가족"),scenes=[
+ expr(T("FAMILY · 가족","家族 · 가족","家人 · 가족"),"아버지, 어머니.","아버지 어머니","아:a 버:beo 지:ji _ 어:eo 머:meo 니:ni",T("Father · Mother","父 · 母","父亲 · 母亲"),T("Family words","家族の言葉","家人的称呼"),
+  T("Father is abeoji and mother is eomeoni. Use them to talk about your parents.","父はアボジ、母はオモニです。両親について話すときに使います。","父亲是아버지，母亲是어머니。谈到父母时使用。"),repeat=True),
+ expr(T("COUNT · 명","数える · 명","数人 · 명"),"가족은 네 명이에요.","가족은 네 명이에요.","가:ga 족:jok 은:eun _ 네:ne _ 명:myeong 이:i 에:e 요:yo",T("There are four people in my family.","家族は四人です。","我家有四口人。"),T("Counting people with 명","명で人を数える","用명数人"),
+  T("Use native numbers plus myeong to count people. Four becomes ne before a counter.","固有語の数字に、명をつけて人を数えます。四は、ネに変わります。","固有词数字加명来数人。四要变成ne。"),nt=N("가족은","가조근",LINK,"가조근.")),
+ build(T("FAMILY · 가족","家族 · 가족","家人 · 가족"),[card("가족은","ga-jo-geun",G['topicn'],T("my family","家族は","家人")),card("세 명","se myeong",G['numcnt'],T("three people","三人","三个人")),card("이에요","i-e-yo",G['cop'],T("is","です","是"))],
+  dict(ko="가족은 세 명이에요.",rom="ga-jo-geun se myeong-i-e-yo",loc=T("My family is three people.","家族は三人です。","我家有三口人。"),say="가족은 세 명이에요."),
+  T("Native number plus myeong. Three is se here.","固有語の数字 + 명。三は、セです。","固有词数字 + 명。三在这里是se。")),
+ quiz(T("mother","母","母亲"),"어머니","eo-meo-ni"),
+ outro([("아버지 어머니",T("Father · Mother","父 · 母","父亲 · 母亲"),"a-beo-ji eo-meo-ni"),("가족은 네 명이에요",T("Four people in my family","家族は四人です","我家有四口人"),"ga-jo-geun ne myeong-i-e-yo"),("가족은 세 명이에요",T("Three people in my family","家族は三人です","我家有三口人"),"ga-jo-geun se myeong-i-e-yo")])])
+LESSONS[14]=dict(title="음식",decor="김치맛비빔밥",topic=T("food","食べ物","饮食"),sub=T("Food · 음식","食べ物 · 음식","饮食 · 음식"),scenes=[
+ expr(T("LIKE · 좋아요","好き · 좋아요","喜欢 · 좋아요"),"김치를 좋아해요.","김치를 좋아해요.","김:gim 치:chi 를:reul _ 좋:jo 아:a 해:hae 요:yo",T("I like kimchi.","キムチが好きです。","我喜欢泡菜。"),T("Saying what you like","好きなものを言う","说出喜欢的东西"),
+  T("Noun plus reul, then joahaeyo, means I like it. Reul marks the object.","名詞に、를をつけて、좋아해요と言うと、「好きです」です。를は目的語を表します。","名词加를，再说좋아해요，就是“我喜欢”。를表示宾语。"),repeat=True,nt=N("좋아해요","조아해요",SIL,"조아해요.")),
+ expr(T("TASTE · 맛","味 · 맛","味道 · 맛"),"이거 맛있어요.","이거 맛있어요.","이:i 거:geo _ 맛:mat 있:iss 어:eo 요:yo",T("This is delicious.","これはおいしいです。","这个很好吃。"),T("Praising food","料理をほめる","夸奖食物"),
+  T("Masisseoyo means it is delicious. Say it after you taste.","맛있어요は「おいしいです」です。食べた後に言いましょう。","맛있어요的意思是“很好吃”。吃过之后说。"),nt=N("맛있어요","마시써요",T("Linking + hard sound","連音 + 濃い音","连读 + 紧音"),"마시써요.")),
+ build(T("EAT · 먹어요","食べる · 먹어요","吃 · 먹어요"),[card("저는","jeo-neun",G['pron'],T("I","私は","我")),card("비빔밥을","bi-bim-ba-beul",G['obj'],T("bibimbap","ビビンバ","拌饭")),card("먹어요","meo-geo-yo",G['verb'],T("eat","食べます","吃"))],
+  dict(ko="저는 비빔밥을 먹어요.",rom="jeo-neun bi-bim-ba-beul meo-geo-yo",loc=T("I eat bibimbap.","私はビビンバを食べます。","我吃拌饭。"),say="저는 비빔밥을 먹어요."),
+  T("Subject, object, verb. The verb always comes last.","主語、目的語、動詞の順です。動詞は最後に来ます。","主语、宾语、动词。动词总是放在最后。")),
+ quiz(T("I like kimchi","キムチが好きです","我喜欢泡菜"),"김치를 좋아해요","gim-chi-reul jo-a-hae-yo"),
+ outro([("김치를 좋아해요",T("I like kimchi","キムチが好きです","我喜欢泡菜"),"gim-chi-reul jo-a-hae-yo"),("이거 맛있어요",T("This is delicious","これはおいしいです","这个很好吃"),"i-geo ma-si-sseo-yo"),("저는 비빔밥을 먹어요",T("I eat bibimbap","私はビビンバを食べます","我吃拌饭"),"jeo-neun bi-bim-ba-beul meo-geo-yo")])])
+LESSONS[15]=dict(title="일상",decor="공부해요하루",topic=T("daily life","日常","日常生活"),sub=T("Daily life · 일상","日常 · 일상","日常 · 일상"),scenes=[
+ expr(T("VERB · 하다","動詞 · 하다","动词 · 하다"),"공부해요.","공부해요","공:gong 부:bu 해:hae 요:yo",T("I study.","勉強します。","我学习。"),T("Noun + 하다 = verb","名詞 + 하다 = 動詞","名词 + 하다 = 动词"),
+  T("Add haeyo to a noun to make a verb. Gongbu means study.","名詞に、해요をつけると動詞になります。공부は「勉強」です。","名词加해요就变成动词。공부是“学习”。"),repeat=True),
+ expr(T("ASK · 질문","質問 · 질문","提问 · 질문"),"무엇을 해요?","무엇을 해요?","무:mu 엇:eo 을:eul _ 해:hae 요:yo",T("What are you doing?","何をしていますか？","你在做什么？"),T("Asking what someone does","何をするか聞く","询问对方在做什么"),
+  T("Mueoseul means what. Use it to ask what someone does.","무엇을は「何を」です。相手が何をするか聞くときに使います。","무엇을是“什么”。用来询问对方做什么。"),nt=N("무엇을","무어슬",LINK,"무어슬.")),
+ build(T("STUDY · 공부","勉強 · 공부","学习 · 공부"),[card("저는","jeo-neun",G['pron'],T("I","私は","我")),card("한국어를","han-gu-geo-reul",G['obj'],T("Korean","韓国語","韩语")),card("공부해요","gong-bu-hae-yo",G['verb'],T("study","勉強します","学习"))],
+  dict(ko="저는 한국어를 공부해요.",rom="jeo-neun han-gu-geo-reul gong-bu-hae-yo",loc=T("I study Korean.","私は韓国語を勉強します。","我学习韩语。"),say="저는 한국어를 공부해요."),
+  T("Swap the object to say what else you do.","目的語を変えれば、ほかのことも言えます。","替换宾语，就能说其他事情。")),
+ quiz(T("I study","勉強します","我学习"),"공부해요","gong-bu-hae-yo"),
+ outro([("공부해요",T("I study","勉強します","我学习"),"gong-bu-hae-yo"),("무엇을 해요?",T("What are you doing?","何をしていますか？","你在做什么？"),"mu-eo-seul hae-yo"),("저는 한국어를 공부해요",T("I study Korean","私は韓国語を勉強します","我学习韩语"),"jeo-neun han-gu-geo-reul gong-bu-hae-yo")])])
+LESSONS[16]=dict(title="과거형",decor="어제갔어요먹",topic=T("the past tense","過去形","过去时"),sub=T("Past tense · 과거형","過去形 · 과거형","过去时 · 과거형"),scenes=[
+ expr(T("PAST · 어제","過去 · 어제","过去 · 어제"),"어제 학교에 갔어요.","어제 학교에 갔어요.","어:eo 제:je _ 학:hak 교:gyo 에:e _ 갔:gat 어:eo 요:yo",T("I went to school yesterday.","昨日、学校に行きました。","我昨天去了学校。"),T("Past: ~았어요 / ~었어요","過去: ~았어요 / ~었어요","过去：~았어요 / ~었어요"),
+  T("Yesterday is eoje. Add ass or eoss to the verb to make it past.","어제は「昨日」です。動詞に、았か었をつけると過去になります。","어제是“昨天”。动词加았或었就变成过去时。"),repeat=True,nt=N("갔어요","가써요",LINK,"가써요.")),
+ expr(T("ASK · 질문","質問 · 질문","提问 · 질문"),"뭐 먹었어요?","뭐 먹었어요?","뭐:mwo _ 먹:meok 었:eot 어:eo 요:yo",T("What did you eat?","何を食べましたか？","你吃了什么？"),T("Asking about the past","過去のことを聞く","询问过去的事"),
+  T("Mwo means what. Meogeosseoyo means ate.","뭐は「何」です。먹었어요は「食べました」です。","뭐是“什么”。먹었어요是“吃了”。"),nt=N("먹었어요","머거써요",LINK,"머거써요.")),
+ build(T("YESTERDAY · 어제","昨日 · 어제","昨天 · 어제"),[card("어제","eo-je",G['timew'],T("yesterday","昨日","昨天")),card("커피를","keo-pi-reul",G['obj'],T("coffee","コーヒー","咖啡")),card("마셨어요","ma-syeo-sseo-yo",G['pastv'],T("drank","飲みました","喝了"))],
+  dict(ko="어제 커피를 마셨어요.",rom="eo-je keo-pi-reul ma-syeo-sseo-yo",loc=T("I drank coffee yesterday.","昨日、コーヒーを飲みました。","我昨天喝了咖啡。"),say="어제 커피를 마셨어요."),
+  T("Time, object, past verb. Easy to build.","時間、目的語、過去形の動詞の順です。","时间、宾语、过去式动词，很容易组合。")),
+ quiz(T("What did you eat?","何を食べましたか？","你吃了什么？"),"뭐 먹었어요?","mwo meo-geo-sseo-yo"),
+ outro([("어제 학교에 갔어요",T("I went to school yesterday","昨日、学校に行きました","我昨天去了学校"),"eo-je hak-gyo-e ga-sseo-yo"),("뭐 먹었어요?",T("What did you eat?","何を食べましたか？","你吃了什么？"),"mwo meo-geo-sseo-yo"),("어제 커피를 마셨어요",T("I drank coffee yesterday","昨日、コーヒーを飲みました","我昨天喝了咖啡"),"eo-je keo-pi-reul ma-syeo-sseo-yo")])])
+LESSONS[17]=dict(title="쇼핑",decor="비싸요깎아좀",topic=T("shopping","買い物","购物"),sub=T("Shopping · 쇼핑","買い物 · 쇼핑","购物 · 쇼핑"),scenes=[
+ expr(T("PRICE · 가격","値段 · 가격","价格 · 가격"),"이거 비싸요.","이거 비싸요.","이:i 거:geo _ 비:bi 싸:ssa 요:yo",T("This is expensive.","これは高いです。","这个很贵。"),T("Describing things","ものの様子を言う","描述东西"),
+  T("Bissayo means expensive. Cheap is ssayo.","비싸요は「高いです」です。安いは、싸요です。","비싸요是“贵”。便宜是싸요。"),repeat=True),
+ expr(T("BARGAIN · 흥정","値切る · 흥정","讲价 · 흥정"),"좀 깎아 주세요.","좀 깎아 주세요.","좀:jom _ 깎:kkak 아:a _ 주:ju 세:se 요:yo",T("Please give me a discount.","少し安くしてください。","请便宜一点。"),T("Bargaining politely","ていねいに値切る","礼貌地讲价"),
+  T("Kkakka juseyo means please lower the price. Jom makes it softer.","깎아 주세요は「安くしてください」です。좀をつけると、やわらかくなります。","깎아 주세요的意思是“请降价”。加좀语气更委婉。"),nt=N("깎아","까까",LINK,"까까.")),
+ build(T("BUY · 사기","買う · 사기","购买 · 사기"),[card("이거","i-geo",G['noun'],T("this","これ","这个")),card("하나","ha-na",G['number'],T("one","一つ","一个")),card("주세요","ju-se-yo",G['req'],T("please give","ください","请给我"))],
+  dict(ko="이거 하나 주세요.",rom="i-geo ha-na ju-se-yo",loc=T("One of these, please.","これを一つください。","请给我一个这个。"),say="이거 하나 주세요."),
+  T("Point, say the number, then juseyo. It works in any shop.","指さして、数を言って、주세요。どの店でも使えます。","指着东西，说数量，再加주세요。在任何商店都管用。")),
+ quiz(T("It is expensive","高いです","很贵"),"비싸요","bi-ssa-yo"),
+ outro([("이거 비싸요",T("This is expensive","これは高いです","这个很贵"),"i-geo bi-ssa-yo"),("좀 깎아 주세요",T("Please give me a discount","少し安くしてください","请便宜一点"),"jom kka-kka ju-se-yo"),("이거 하나 주세요",T("One of these, please","これを一つください","请给我一个这个"),"i-geo ha-na ju-se-yo")])])
+LESSONS[18]=dict(title="교통",decor="지하철버스서울",topic=T("transportation","交通","交通"),sub=T("Transportation · 교통","交通 · 교통","交通 · 교통"),scenes=[
+ expr(T("RIDE · 타요","乗る · 타요","乘坐 · 타요"),"지하철을 타요.","지하철을 타요.","지:ji 하:ha 철:cheol 을:eul _ 타:ta 요:yo",T("I take the subway.","地下鉄に乗ります。","我坐地铁。"),T("Taking transport","乗り物に乗る","乘坐交通工具"),
+  T("Jihacheol is the subway. Tayo means ride, and reul comes before it.","지하철は「地下鉄」です。타요は「乗ります」で、前に를をつけます。","지하철是“地铁”。타요是“乘坐”，前面加를。"),repeat=True,nt=N("지하철을","지하처를",LINK,"지하처를.")),
+ expr(T("GO · 가요","行く · 가요","去 · 가요"),"서울역에 가요.","서울역에 가요.","서:seo 울:ul 역:yeok 에:e _ 가:ga 요:yo",T("I go to Seoul Station.","ソウル駅に行きます。","我去首尔站。"),T("Place + 에 가요","場所 + 에 가요","地点 + 에 가요"),
+  T("Place plus e plus gayo means go to.","場所に、에をつけて、가요と言うと、「〜に行きます」です。","地点加에，再说가요，就是“去…”。")),
+ build(T("BY BUS · 버스","バスで · 버스","坐公交 · 버스"),[card("저는","jeo-neun",G['pron'],T("I","私は","我")),card("버스로","beo-seu-ro",G['means'],T("by bus","バスで","坐公交车")),card("가요","ga-yo",G['verb'],T("go","行きます","去"))],
+  dict(ko="저는 버스로 가요.",rom="jeo-neun beo-seu-ro ga-yo",loc=T("I go by bus.","私はバスで行きます。","我坐公交车去。"),say="저는 버스로 가요."),
+  T("Add ro to a vehicle to say how you go.","乗り物に、로をつけると、手段を表せます。","在交通工具后加로，表示乘坐的方式。")),
+ quiz(T("I go to Seoul Station","ソウル駅に行きます","我去首尔站"),"서울역에 가요","seo-ul-yeo-ge ga-yo"),
+ outro([("지하철을 타요",T("I take the subway","地下鉄に乗ります","我坐地铁"),"ji-ha-cheo-reul ta-yo"),("서울역에 가요",T("I go to Seoul Station","ソウル駅に行きます","我去首尔站"),"seo-ul-yeo-ge ga-yo"),("저는 버스로 가요",T("I go by bus","私はバスで行きます","我坐公交车去"),"jeo-neun beo-seu-ro ga-yo")])])
+LESSONS[19]=dict(title="사과와 부탁",decor="죄송괜찮도와",topic=T("apologies and requests","謝罪とお願い","道歉和请求"),sub=T("Sorry and please · 사과 부탁","謝罪とお願い · 사과 부탁","道歉和请求 · 사과 부탁"),scenes=[
+ expr(T("SORRY · 사과","謝罪 · 사과","道歉 · 사과"),"죄송합니다.","죄송합니다","죄:joe 송:song 합:ham 니:ni 다:da",T("I am sorry.","申し訳ありません。","对不起。"),T("Apologizing","謝る","道歉"),
+  T("Use it to apologize. It ends just like gamsahamnida.","謝るときに使います。감사합니다と同じ語尾です。","用来道歉。结尾和감사합니다一样。"),repeat=True,nt=N("합니","함니",BM,"죄송함니다.")),
+ expr(T("OKAY · 괜찮아요","大丈夫 · 괜찮아요","没关系 · 괜찮아요"),"괜찮아요.","괜찮아요","괜:gwaen 찮:chan 아:a 요:yo",T("It is okay.","大丈夫です。","没关系。"),T("Reassuring someone","相手を安心させる","安慰对方"),
+  T("It means it is okay, no problem. It is also the usual answer to sorry.","「大丈夫です」という意味です。謝られたときの返事にも使います。","意思是“没关系”。也是回应道歉的常用说法。"),nt=N("괜찮아요","괜차나요",SIL,"괜차나요.")),
+ build(T("HELP · 부탁","お願い · 부탁","请求 · 부탁"),[card("저를","jeo-reul",G['obj'],T("me","私を","我")),card("도와","do-wa",G['verb'],T("help","助けて","帮助")),card("주세요","ju-se-yo",G['req'],T("please give","ください","请给我"))],
+  dict(ko="저를 도와 주세요.",rom="jeo-reul do-wa ju-se-yo",loc=T("Please help me.","私を助けてください。","请帮帮我。"),say="저를 도와 주세요."),
+  T("Use it when you need help. Everyone will understand.","助けが必要なときに使います。誰にでも通じます。","需要帮助时使用，谁都能听懂。")),
+ quiz(T("It is okay","大丈夫です","没关系"),"괜찮아요","gwaen-cha-na-yo"),
+ outro([("죄송합니다",T("I am sorry","申し訳ありません","对不起"),"joe-song-ham-ni-da"),("괜찮아요",T("It is okay","大丈夫です","没关系"),"gwaen-cha-na-yo"),("저를 도와 주세요",T("Please help me","私を助けてください","请帮帮我"),"jeo-reul do-wa ju-se-yo")])])
+LESSONS[20]=dict(title="1급 종합 복습",decor="종합복습끝일",topic=T("the final Level 1 review","1級の総復習","1级总复习"),sub=T("Level 1 final review · 종합 복습","1級の総復習 · 종합 복습","1级总复习 · 종합 복습"),scenes=[
+ quiz(T("What is the date today?","今日は何日ですか？","今天几号？"),"오늘은 며칠이에요?","o-neu-reun myeo-chi-ri-e-yo"),
+ quiz(T("I like kimchi","キムチが好きです","我喜欢泡菜"),"김치를 좋아해요","gim-chi-reul jo-a-hae-yo"),
+ quiz(T("What did you eat?","何を食べましたか？","你吃了什么？"),"뭐 먹었어요?","mwo meo-geo-sseo-yo"),
+ quiz(T("It is expensive","高いです","很贵"),"비싸요","bi-ssa-yo"),
+ quiz(T("I go to Seoul Station","ソウル駅に行きます","我去首尔站"),"서울역에 가요","seo-ul-yeo-ge ga-yo"),
+ outro([("김치를 좋아해요",T("I like kimchi","キムチが好きです","我喜欢泡菜"),"gim-chi-reul jo-a-hae-yo"),("서울역에 가요",T("I go to Seoul Station","ソウル駅に行きます","我去首尔站"),"seo-ul-yeo-ge ga-yo"),("괜찮아요",T("It is okay","大丈夫です","没关系"),"gwaen-cha-na-yo")])])
+LESSONS[20]['bye']=T("Level 1 complete! See you in Level 2.","1級、修了です！2級で会いましょう。","1级完成！我们2级见。")
+LESSONS[20]['next']=("TOPIK 2급",T("LEVEL 2","2級","2级"))
+LESSONS=dict(sorted(LESSONS.items()))

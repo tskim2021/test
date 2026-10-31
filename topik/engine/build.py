@@ -5,12 +5,21 @@ import numpy as np
 from gtts import gTTS
 from lessons import LESSONS,G
 n=int(sys.argv[1]); lang=sys.argv[2]; NN=f"{n:02d}"
-GL={'en':'en','ja':'ja','zh':'zh-CN'}[lang]; TEMPO={'en':1.1,'ja':1.3,'zh':1.25}[lang]
+GL={'en':'en','ja':'ja','zh':'zh-CN','th':'th','ms':'ms','tw':'zh-TW'}[lang]; TEMPO={'en':1.1,'ja':1.3,'zh':1.25,'th':1.15,'ms':1.15,'tw':1.25}[lang]
 HERE=os.path.dirname(os.path.abspath(__file__)); OUTD=os.path.join(HERE,'..','out'); TTS=os.path.join(OUTD,'tts')
 os.makedirs(TTS,exist_ok=True); SR=44100
-R=lambda x:x[lang] if isinstance(x,dict) else x
+from i18n import TH,MS,lookup
+import opencc
+S2T=opencc.OpenCC('s2twp')   # 대만어(번체·대만 어휘): 중국어 간체를 변환
+def R(x):
+    if not isinstance(x,dict): return x
+    if lang in x: return x[lang]
+    if x['en']==x['ja']==x['zh']: return x['en']       # 언어 공통(로마자·숫자 등)
+    if lang=='tw': return S2T.convert(x['zh'])
+    if lang=='th': return lookup(x['en'],TH,False)
+    if lang=='ms': return lookup(x['en'],MS,True)
 strip=lambda h:re.sub(r'<[^>]+>','',h)
-LES=LESSONS[n]; GAPS=2.0 if n==10 else 2.5
+LES=LESSONS[n]; GAPS=2.0 if n in (10,20) else 2.5
 LEAD,PAD,TAIL=0.5,0.2,0.4
 
 def load(path,tempo):
@@ -28,10 +37,13 @@ def tts(text,glang,slow,tempo):
     return load(p,tempo)
 
 # ── 언어별 공통 문구
-INTRO={'en':lambda n,t:f"Lesson {n}. Today: {t}.",'ja':lambda n,t:f"レッスン{n}。今日は、{t}です。",'zh':lambda n,t:f"第{n}课。今天学，{t}。"}[lang]
-ASK={'en':lambda p:f"How do you say {p}?",'ja':lambda p:f"{p}、は韓国語で？",'zh':lambda p:f"{p}，韩语怎么说？"}[lang]
+INTRO={'en':lambda n,t:f"Lesson {n}. Today: {t}.",'ja':lambda n,t:f"レッスン{n}。今日は、{t}です。",'zh':lambda n,t:f"第{n}课。今天学，{t}。",'th':lambda n,t:f"บทเรียนที่ {n} วันนี้: {t}",'ms':lambda n,t:f"Pelajaran {n}. Hari ini: {t}.",'tw':lambda n,t:f"第{n}課。今天學，{t}。"}[lang]
+ASK={'en':lambda p:f"How do you say {p}?",'ja':lambda p:f"{p}、は韓国語で？",'zh':lambda p:f"{p}，韩语怎么说？",'th':lambda p:f"{p} ภาษาเกาหลีพูดว่าอย่างไร",'ms':lambda p:f"Bagaimana hendak sebut {p} dalam bahasa Korea?",'tw':lambda p:f"{p}，韓語怎麼說？"}[lang]
 LAB={'en':dict(hdr=f"LEVEL 1 · LESSON {NN}",turn="Your turn · 따라 해 보세요",turn2="Say it out loud with me",wr="WRITTEN",sd="SOUNDS LIKE",ql="How do you say…",nl="NEXT LESSON",kq="QUICK QUIZ · 퀴즈",ko_="TODAY'S EXPRESSIONS · 오늘 배운 표현",font='en'),
  'ja':dict(hdr=f"1級 · レッスン {NN}",turn="あなたの番 · 따라 해 보세요",turn2="一緒に声に出して言おう",wr="表記",sd="発音",ql="韓国語でなんと言う？",nl="次のレッスン",kq="ミニクイズ · 퀴즈",ko_="今日の表現 · 오늘 배운 표현",font='ja'),
+ 'th':dict(hdr=f"ระดับ 1 · บทที่ {NN}",turn="ตาคุณแล้ว · 따라 해 보세요",turn2="พูดออกเสียงตามฉัน",wr="การเขียน",sd="การออกเสียง",ql="พูดว่าอย่างไรในภาษาเกาหลี…",nl="บทต่อไป",kq="ควิซ · 퀴즈",ko_="สำนวนที่เรียนวันนี้ · 오늘 배운 표현",font='th'),
+ 'ms':dict(hdr=f"TAHAP 1 · PELAJARAN {NN}",turn="Giliran anda · 따라 해 보세요",turn2="Sebut dengan kuat bersama saya",wr="TULISAN",sd="BUNYI",ql="Bagaimana hendak sebut…",nl="PELAJARAN SETERUSNYA",kq="KUIZ · 퀴즈",ko_="UNGKAPAN HARI INI · 오늘 배운 표현",font='ms'),
+ 'tw':dict(hdr=f"1級 · 第 {NN} 課",turn="輪到你了 · 따라 해 보세요",turn2="跟我大聲唸出來",wr="書寫",sd="發音",ql="用韓語怎麼說…",nl="下一課",kq="小測驗 · 퀴즈",ko_="今天學的表達 · 오늘 배운 표현",font='tw'),
  'zh':dict(hdr=f"1级 · 第 {NN} 课",turn="轮到你了 · 따라 해 보세요",turn2="跟我大声读出来",wr="书写",sd="发音",ql="用韩语怎么说…",nl="下节课",kq="小测验 · 퀴즈",ko_="今天学的表达 · 오늘 배운 표현",font='zh')}[lang]
 
 scenes=[]; items={}; subs=[]; events=[]; t=0.0

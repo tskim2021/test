@@ -1,5 +1,5 @@
 <!doctype html><html><head><meta charset="utf-8"><style>
-@font-face{font-family:NKR;src:url(fonts/NotoSansKR.ttf);font-weight:100 900}@font-face{font-family:NJP;src:url(fonts/NotoSansJP.ttf);font-weight:100 900}@font-face{font-family:NSC;src:url(fonts/NotoSansSC.ttf);font-weight:100 900}
+@font-face{font-family:NKR;src:url(fonts/NotoSansKR.ttf);font-weight:100 900}@font-face{font-family:NJP;src:url(fonts/NotoSansJP.ttf);font-weight:100 900}@font-face{font-family:NTH;src:url(fonts/NotoSansThai.ttf);font-weight:100 900}@font-face{font-family:NTC;src:url(fonts/NotoSansTC.ttf);font-weight:100 900}@font-face{font-family:NSC;src:url(fonts/NotoSansSC.ttf);font-weight:100 900}
 :root{--ink:#0d1024;--coral:#ff7a59;--amber:#ffc978;--violet:#8b6cff;--violet2:#c3b5ff;--teal:#3de0c5;--teal2:#a4f3e6}
 *{margin:0;box-sizing:border-box}
 html,body{width:1280px;height:720px;overflow:hidden;background:var(--ink);font-family:NKR,sans-serif;color:#fff}
@@ -87,7 +87,7 @@ canvas.viz{width:1136px;height:130px}
 const $=i=>document.getElementById(i),clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x)),ease=x=>1-Math.pow(1-clamp(x),3),back=x=>{x=clamp(x);const c=1.6;return 1+(c+1)*Math.pow(x-1,3)+c*Math.pow(x-1,2)};
 const win=(t,a,b,f=.3)=>Math.min(ease((t-a)/f),ease((b-t)/f)),set=(el,o,y=0,sc=1)=>{el.style.opacity=o;el.style.transform=`translateY(${(1-o)*y}px) scale(${1-(1-o)*(1-sc)})`};
 const sz=(len,tb)=>tb.find(([m])=>len<=m)[1];
-document.body.style.fontFamily={en:'NKR,NJP,sans-serif',ja:'NJP,NKR,sans-serif',zh:'NSC,NKR,sans-serif'}[LANG];
+document.body.style.fontFamily={en:'NKR,NJP,sans-serif',ja:'NJP,NKR,sans-serif',zh:'NSC,NKR,sans-serif',tw:'NTC,NKR,sans-serif',th:'NTH,NKR,sans-serif',ms:'NKR,NJP,sans-serif'}[LANG];
 $('hdrt').textContent=L.hdr;
 const SC=TL.scenes,IT=TL.items,K=(i,k)=>IT[i+'_'+k];
 $('prog').innerHTML=SC.map(()=>'<i><b></b></i>').join('');
@@ -134,7 +134,7 @@ window.render=function(t){
   q('.qr').style.opacity=win(t,g[0]-.1,a[0]+.05,.2);ring(q('.qr'),t,g[0],g[1]);const an=ease((t-a[0]+.05)/.35),ans=q('.qans');ans.style.opacity=an;ans.style.transform=`scale(${.9+.1*back((t-a[0])/.5)})`;ans.querySelector('b').style.setProperty('--p',clamp((t-a[0])/(a[1]-a[0]))*100+'%');}
  if(s.type==='outro'){sec.querySelectorAll('.rc').forEach((e,i)=>set(e,ease((l-.35-i*.3)/.6),40,.96));set(q('.next'),ease((l-1.6)/.6),20);}
  const sb=TL.subs.find(x=>t>=x.t0-.05&&t<=x.t1+.3),S=$('sub');
- if(sb){const key=sb.ko+'|'+sb.en;if(S.dataset.k!==key){S.innerHTML=`<span class="in"><span class="ko${[...sb.ko].length>(/[\u3040-\u30ff\u4e00-\u9fff]/.test(sb.ko)?34:54)?" sm":""}">${sb.ko}</span><span class="en">${sb.en}</span></span>`;S.dataset.k=key;}const o=Math.min(ease((t-sb.t0+.05)/.25),ease((sb.t1+.3-t)/.25));S.style.opacity=o;S.style.transform=`translateY(${(1-o)*10}px)`;}else S.style.opacity=0;
+ if(sb){const key=sb.ko+'|'+sb.en;if(S.dataset.k!==key){S.innerHTML=`<span class="in"><span class="ko${[...sb.ko].length>(/[\u3040-\u30ff\u4e00-\u9fff\u0e00-\u0e7f]/.test(sb.ko)?34:54)?" sm":""}">${sb.ko}</span><span class="en">${sb.en}</span></span>`;S.dataset.k=key;}const o=Math.min(ease((t-sb.t0+.05)/.25),ease((sb.t1+.3-t)/.25));S.style.opacity=o;S.style.transform=`translateY(${(1-o)*10}px)`;}else S.style.opacity=0;
 };
 document.fonts.ready.then(()=>render(0));
 </script></body></html>
