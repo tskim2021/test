@@ -202,6 +202,26 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { shop: true, currency: shop.currency, admin_url: `${shop.shopUrl}/adm/shop_admin/orderform.php?od_id=`, ...r });
     }
 
+    // 입금 내역 없이 주문만 입금 처리(관리자 전용, 메모 필수): 문자를 놓쳤거나 다른 경로로 입금 확인한 경우.
+    // 맞는 입금이 목록에 있으면 화면은 /api/deposits/:id/confirm 으로 그 입금과 연결해 처리한다.
+    const om = req.method === 'POST' && url.pathname.match(/^\/api\/orders\/([A-Za-z0-9_-]{1,40})\/confirm$/);
+    if (om) {
+      if (!isAdmin(req, url)) return json(res, 401, { error: 'unauthorized' });
+      if (!shop) return json(res, 503, { error: '쇼핑몰 DB가 설정되지 않았습니다' });
+      let body; try { body = JSON.parse(await readBody(req)); } catch { body = {}; }
+      const memo = typeof body.memo === 'string' ? body.memo.trim() : '';
+      if (!memo) return json(res, 400, { error: '입금 내역 없이 처리하려면 처리 사유(메모)를 입력해야 합니다' });
+      if (memo.length > 500) return json(res, 400, { error: '메모는 500자 이내' });
+      try {
+        await shop.confirm(om[1], { note: `입금 내역 없이 수동 ${shop.statusPaid} 처리: ${memo}` });
+      } catch (e) {
+        return json(res, e.status || 500, { error: e.status ? e.message : '주문 처리 중 오류' });
+      }
+      const name = String(body.name || '').slice(0, 30), amount = Number.isInteger(body.amount) ? body.amount : 0;
+      broadcast('processed', { id: null, sender: name, amount, od_id: om[1], kind: 1, manual: true, linked: false, memo, at: new Date().toISOString() });
+      return json(res, 200, { ok: true, od_id: om[1] });
+    }
+
     // 가짜 입금 테스트(관리자 전용): /test-deposit?token=관리자토큰&amount=1000&sender=테스트
     // 실제 주문이 처리되지 않도록 자동 처리·텔레그램은 건너뛰고, 입금자 앞에 [테스트] 를 붙이고 메모에 표시한다. 목록에서 선택삭제로 숨기면 된다.
     if (req.method === 'GET' && url.pathname === '/test-deposit') {

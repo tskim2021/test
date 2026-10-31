@@ -260,7 +260,21 @@ export function shopFromPool(pool, prefix = 'g5_', opts = {}) {
       for (const o of rows) counts[o.od_settle_case || '(없음)'] = (counts[o.od_settle_case || '(없음)'] || 0) + 1;
       const bank = rows.filter((o) => /무통장/.test(o.od_settle_case || '') && num(o.od_misu) > 0).slice(0, 500);
       const items = await itemsOf(bank.map((o) => o.od_id));
+      // 같은 기간 전체 무통장 주문 대비 미처리/처리완료(취소·반품·품절 제외). 금액은 원화(달러 쇼핑몰이면 환율 적용).
+      const sw = ["od_settle_case LIKE '%무통장%'", "od_status NOT IN ('취소','반품','품절')"];
+      const sa = [];
+      if (from) { sw.push('od_time >= ?'); sa.push(`${from} 00:00:00`); }
+      if (to) { sw.push('od_time <= ?'); sa.push(`${to} 23:59:59`); }
+      const [all] = await pool.query(`SELECT od_status, od_misu, od_receipt_price FROM ${O} WHERE ${sw.join(' AND ')}`, sa);
+      const krw = (v) => (rate ? krwOf(v, rate) : num(v));
+      const summary = { total: { count: 0, amount: 0 }, pending: { count: 0, amount: 0 }, done: { count: 0, amount: 0 } };
+      for (const o of all) {
+        const k = o.od_status === '주문' ? 'pending' : 'done';
+        const a = krw(k === 'pending' ? o.od_misu : o.od_receipt_price);
+        summary[k].count++; summary[k].amount += a; summary.total.count++; summary.total.amount += a;
+      }
       return {
+        summary,
         orders: bank.map((o) => shapeOrder(o, items, rate)),
         settle_cases: Object.entries(counts).map(([s, n]) => ({ s, n })).sort((a, b) => b.n - a.n),
         rate,
