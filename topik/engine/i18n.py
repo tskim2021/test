@@ -2,6 +2,14 @@
 # 검수자는 이 파일만 고치면 됩니다. (대만어 tw는 중국어 간체를 OpenCC로 변환)
 # 'A · B' 형태의 라벨은 문장 전체가 없으면 영문 조각(A, B)별로 찾고, 한글/숫자 조각은 그대로 둡니다.
 RAW = """
+3 vowels ‖ สระ 3 ตัว ‖ 3 vokal
+Three basic vowels ‖ สระพื้นฐาน 3 ตัว ‖ Tiga vokal asas
+ㄱ + vowel ‖ ㄱ + สระ ‖ ㄱ + vokal
+reporter ‖ นักข่าว ‖ wartawan
+Let's go ‖ ไปกันเถอะ ‖ Jom pergi
+Hangul is built from simple shapes. Start with three vowels: a, i, u. ‖ ฮันกึลสร้างจากรูปทรงง่ายๆ เริ่มจากสระ 3 ตัว: อา อี อู ‖ Hangul dibina daripada bentuk yang mudah. Mulakan dengan tiga vokal: a, i, u.
+Put the consonant ㄱ before a vowel, and it makes a sound: ga, gi, gu. ‖ วางพยัญชนะ ㄱ ไว้หน้าสระ ก็จะอ่านออกเสียงได้: คา กี กู ‖ Letakkan konsonan ㄱ sebelum vokal, dan ia menghasilkan bunyi: ga, gi, gu.
+A consonant and a vowel make one block. Now read: ga-ja. It means let's go. ‖ พยัญชนะกับสระรวมกันเป็นหนึ่งพยางค์ ลองอ่านดู: คา-จา แปลว่า ไปกันเถอะ ‖ Satu konsonan dan satu vokal membentuk satu blok. Sekarang baca: ga-ja. Maksudnya jom pergi.
 30 minutes ‖ 30 นาที ‖ 30 minit
 5 consonants ‖ พยัญชนะ 5 ตัว ‖ 5 konsonan
 6 vowels ‖ สระ 6 ตัว ‖ 6 vokal

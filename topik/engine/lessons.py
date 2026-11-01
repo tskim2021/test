@@ -141,18 +141,18 @@ _old=LESSONS
 LESSONS={3:_old[2],4:_old[3],5:_old[4],6:_old[5],7:_old[6],8:_old[7],9:_old[9],10:_old[10]}
 BACKLOG_LEVEL2={'days':_old[8]}   # 요일은 10강 안에 맞추려고 2급으로 이동
 S3=lambda x:T(x,x,x)
-LESSONS[1]=dict(title="한글 읽기",decor="ㅏㅓㄱㄴ가",topic=T("reading Hangul","ハングルの読み方","认读韩文"),sub=T("Reading Hangul · 한글","ハングルを読もう · 한글","认读韩文 · 한글"),scenes=[
- expr(T("VOWELS · 모음","母音 · 모음","元音 · 모음"),"아, 어, 오, 우, 으, 이.","ㅏ ㅓ ㅗ ㅜ ㅡ ㅣ","ㅏ:a ㅓ:eo ㅗ:o ㅜ:u ㅡ:eu ㅣ:i",
-  S3("a · eo · o · u · eu · i"),T("Six basic vowels","基本の母音6つ","6个基本元音"),
-  T("Hangul is built from simple shapes. Start with six basic vowels.","ハングルは、簡単な形でできています。まず、基本の母音を六つ。","韩文由简单的形状组成。先学六个基本元音。"),repeat=True),
- expr(T("CONSONANTS · 자음","子音 · 자음","辅音 · 자음"),"가, 나, 다, 마, 사.","ㄱ ㄴ ㄷ ㅁ ㅅ","ㄱ:g ㄴ:n ㄷ:d ㅁ:m ㅅ:s",
-  S3("ga · na · da · ma · sa"),T("Consonant + ㅏ","子音 + ㅏ","辅音 + ㅏ"),
-  T("Add a consonant to the vowel a, and you can read a sound. Say ga, na, da, ma, sa.","母音のアに子音をつけると、音が読めます。ガ、ナ、ダ、マ、サ。","在元音a前加辅音，就能读出一个音。ga、na、da、ma、sa。")),
- build(T("BLOCKS · 글자","文字 · 글자","字块 · 글자"),[card("ㄱ","gi-yeok",T("CONSONANT","子音","辅音"),S3("g"),say="기역."),card("ㅏ","",T("VOWEL","母音","元音"),S3("a"),say="아."),card("가","",T("SYLLABLE","音節","音节"),S3("ga"),say="가.")],
-  dict(ko="나라",rom="na-ra",loc=T("country","国","国家"),say="나라."),
-  T("A consonant and a vowel make one block. Now read: na-ra. It means country.","子音と母音で、一つの文字になります。読んでみましょう。ナラ、国という意味です。","辅音和元音组成一个字块。来读一读：na-ra，意思是国家。"),ops=('+','=')),
- quiz(S3("나무"),"na-mu",T("tree","木","树"),say="나무.",ask=T("Can you read this word?","この単語、読めますか？","你能读出这个词吗？"),qlabel=T("READ THIS · 읽어 보세요","読んでみよう · 읽어 보세요","读读看 · 읽어 보세요")),
- outro([("ㅏ ㅓ ㅗ ㅜ ㅡ ㅣ",T("6 vowels","母音6つ","6个元音"),"a eo o u eu i"),("ㄱ ㄴ ㄷ ㅁ ㅅ",T("5 consonants","子音5つ","5个辅音"),"g n d m s"),("가 · 나라",T("Blocks and a word","文字と単語","字块和单词"),"ga · na-ra")])])
+LESSONS[1]=dict(title="한글 읽기",decor="ㅏㅣㅜㄱ자",topic=T("reading Hangul","ハングルの読み方","认读韩文"),sub=T("Reading Hangul · 한글","ハングルを読もう · 한글","认读韩文 · 한글"),scenes=[
+ expr(T("VOWELS · 모음","母音 · 모음","元音 · 모음"),"아, 이, 우.","ㅏ ㅣ ㅜ","ㅏ:a ㅣ:i ㅜ:u",
+  S3("a · i · u"),T("Three basic vowels","基本の母音3つ","3个基本元音"),
+  T("Hangul is built from simple shapes. Start with three vowels: a, i, u.","ハングルは、簡単な形でできています。まず、母音を三つ。ア、イ、ウ。","韩文由简单的形状组成。先学三个元音：a、i、u。"),repeat=True),
+ expr(T("CONSONANTS · 자음","子音 · 자음","辅音 · 자음"),"가, 기, 구.","가 기 구","가:ga 기:gi 구:gu",
+  S3("ga · gi · gu"),T("ㄱ + vowel","ㄱ + 母音","ㄱ + 元音"),
+  T("Put the consonant ㄱ before a vowel, and it makes a sound: ga, gi, gu.","子音のㄱを母音の前に置くと、音になります。ガ、ギ、グ。","把辅音ㄱ放在元音前面，就能读出声音：ga、gi、gu。"),repeat=True),
+ build(T("BLOCKS · 글자","文字 · 글자","字块 · 글자"),[card("ㅈ","ji-eut",T("CONSONANT","子音","辅音"),S3("j"),say="지읒."),card("ㅏ","",T("VOWEL","母音","元音"),S3("a"),say="아."),card("자","",T("SYLLABLE","音節","音节"),S3("ja"),say="자.")],
+  dict(ko="가자",rom="ga-ja",loc=T("Let's go.","行こう。","走吧。"),say="가자."),
+  T("A consonant and a vowel make one block. Now read: ga-ja. It means let's go.","子音と母音で、一つの文字になります。読んでみましょう。ガジャ、行こう、という意味です。","辅音和元音组成一个字块。来读一读：ga-ja，意思是“走吧”。"),ops=('+','=')),
+ quiz(S3("기자"),"gi-ja",T("reporter","記者","记者"),say="기자.",ask=T("Can you read this word?","この単語、読めますか？","你能读出这个词吗？"),qlabel=T("READ THIS · 읽어 보세요","読んでみよう · 읽어 보세요","读读看 · 읽어 보세요")),
+ outro([("ㅏ ㅣ ㅜ",T("3 vowels","母音3つ","3个元音"),"a i u"),("가 기 구",T("ㄱ + vowel","ㄱ + 母音","ㄱ + 元音"),"ga gi gu"),("가자",T("Let's go","行こう","走吧"),"ga-ja")])])
 LESSONS[2]=dict(title="인사",decor="안녕하세요감사",topic=T("greetings","あいさつ","问候"),sub=T("Greetings · 인사","あいさつ · 인사","问候 · 인사"),scenes=[
  expr(T("HELLO · 인사","こんにちは · 인사","你好 · 인사"),"안녕하세요.","안녕하세요","안:an 녕:nyeong 하:ha 세:se 요:yo",
   T("Hello","こんにちは","你好"),T("Polite · safe with anyone","丁寧 · 誰にでも使える","敬语 · 对谁都可以用"),
