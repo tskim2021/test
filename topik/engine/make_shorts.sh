@@ -6,7 +6,7 @@ SLUG=(x hangul greetings numbers1 numbers2 this-that country-job places time ord
 LANGS=${LANGS:-en ja zh th ms tw}; LESSONS=${LESSONS:-$(seq 1 20)}
 dur() { python3 -c "import re,json;s=open('../out/timeline_$1_$2.js').read();print(json.loads(re.search(r'const TL=(.*?);const L=',s,re.S).group(1))['dur'])"; }
 one() { local NN=$1 l=$2 n=$((10#$1)); local out=../shorts/TOPIK1_L${NN}_${SLUG[$n]}_${l}_shorts.mp4
-  [ -s $out ] && return
+  [ -s $out ] && [ -z "$FORCE" ] && return
   [ -f ../out/timeline_${NN}_$l.js ] || python3 build.py $n $l
   for g in 1.8 1.4 1.0; do
     awk -v d=$(dur $NN $l) 'BEGIN{exit !(d>59)}' || break

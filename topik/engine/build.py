@@ -62,7 +62,8 @@ def open_scene(typ,d):
     t+=LEAD; scenes.append(dict(type=typ,t0=t-LEAD,d=d))
 
 # 인트로
-i=0; open_scene('intro',dict(num=NN,title1=f"1급 {n}강",title2=LES['title'],sub=R(LES['sub']),decor=list(LES['decor'])[:5]))
+i=0; from titles import intro as _intro
+open_scene('intro',dict(num=NN,**_intro(LES,lang,NN),decor=list(LES['decor'])[:5]))
 clip(f'{i}_i',INTRO(n,R(LES['topic'])),'loc',INTRO(n,R(LES['topic']))); close(i,'intro',None)
 cnt=0
 for sc in LES['scenes']:
