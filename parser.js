@@ -33,3 +33,17 @@ export function parseNotification({ title = '', text = '' }) {
 
   return { amount, sender, balance, raw: body };
 }
+
+// 카카오뱅크가 직접 보낸 형식인지(문자: "[카카오뱅크] … 입금", 앱 알림: "입금 N원 이름 → 통장(1234)").
+// 고객 이메일·메신저 알림처럼 '입금'이라는 말만 들어간 글은 자동 처리 대상이 아니다.
+export function isBankFormat(raw) {
+  const t = String(raw || '').replace(/\s+/g, ' ').trim();
+  return /^(\[Web발신\] )?\[카카오뱅크\] /.test(t) || /^입금 [\d,]+원 .+ → .+\(\d{4}\)/.test(t);
+}
+
+// 입금된 계좌 끝 4자리(문자: "노*유(4063)", 앱 알림: "입출금통장(4063)"). 없으면 null.
+export function accountOf(raw) {
+  const t = String(raw || '').replace(/\s+/g, ' ');
+  const m = t.match(/\[카카오뱅크\] \S*\((\d{4})\)/) || t.match(/→ [^()]*\((\d{4})\)/);
+  return m ? m[1] : null;
+}

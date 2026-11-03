@@ -19,6 +19,7 @@ public class SmsReceiver extends BroadcastReceiver {
         if (!store.smsMode()) return;
         SmsMessage[] parts = Telephony.Sms.Intents.getMessagesFromIntent(intent);
         if (parts == null || parts.length == 0) return;
+        if (!SmsPick.isBankSender(parts[0].getOriginatingAddress())) return; // 카카오뱅크(1599-3333) 문자만
         StringBuilder body = new StringBuilder(); // 긴 문자는 여러 조각으로 온다
         for (SmsMessage m : parts) if (m != null && m.getMessageBody() != null) body.append(m.getMessageBody());
         long now = System.currentTimeMillis();

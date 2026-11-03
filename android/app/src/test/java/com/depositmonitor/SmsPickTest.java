@@ -55,4 +55,15 @@ public class SmsPickTest {
         // 잔액 줄이 없는 문자
         assertEquals("10/31 16:23|89,640|천봉상", SmsPick.key("[Web발신]\n[카카오뱅크]\n김*희(1526)\n10/31 16:23\n입금 89,640원\n천봉상"));
     }
+
+    @Test public void 카카오뱅크_문자만_인정() {
+        assertTrue(SmsPick.isDepositSms("[Web발신] [카카오뱅크] 노*유(4063) 11/03 10:39 입금 32,300원 김영동"));
+        assertFalse(SmsPick.isDepositSms("Re: AMEYOKO 1:1문의 카카오뱅크로 87100원 입금 완료했습니다"));
+        assertTrue(SmsPick.isBankSender("1599-3333")); assertTrue(SmsPick.isBankSender("+8215993333"));
+        assertFalse(SmsPick.isBankSender("010-1234-5678")); assertFalse(SmsPick.isBankSender(null));
+        assertTrue(SmsPick.isMessagingApp("com.samsung.android.messaging"));
+        assertTrue(SmsPick.isMessagingApp("com.google.android.apps.messaging"));
+        assertFalse(SmsPick.isMessagingApp("com.google.android.gm"));
+        assertFalse(SmsPick.isMessagingApp("com.kakao.talk"));
+    }
 }

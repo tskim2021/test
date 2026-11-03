@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { openDb, isDate } from './db.js';
-import { parseNotification } from './parser.js';
+import { parseNotification, isBankFormat, accountOf } from './parser.js';
 import { createShop, orderKeys, relatedDepositIds } from './shop.js';
 import { buildChart } from './chart.js';
 import { createApns, isDeadToken, pushMessage } from './apns.js';
@@ -25,6 +25,8 @@ const shop = await createShop();
 
 // 자동 처리: 입금자명·금액이 쇼핑몰의 미입금 주문 '한 건'과 정확히 같으면 사람이 누르지 않아도 입금 처리한다. AUTO_PROCESS=0 으로 끈다.
 const AUTO_PROCESS = process.env.AUTO_PROCESS !== '0';
+// 받을 계좌 끝 4자리(쉼표로 여러 개). 설정하면 다른 계좌의 카카오뱅크 문자는 저장하지 않는다. 예: BANK_ACCOUNTS=4063
+const BANK_ACCOUNTS = (process.env.BANK_ACCOUNTS || '').split(',').map((s) => s.trim()).filter(Boolean);
 // 이 기능을 켜기 전에 이미 들어와 있던 입금은 자동 처리하지 않는다(AUTO_PROCESS_BACKFILL=1 이면 포함).
 if (!db.getMeta('auto_since')) db.setMeta('auto_since', process.env.AUTO_PROCESS_BACKFILL === '1' ? '1970-01-01T00:00:00.000Z' : new Date().toISOString());
 shop?.ping().then((n) => console.log(`쇼핑몰 DB 연결 확인: 주문 ${n}건`)).catch((e) => console.error('쇼핑몰 DB 연결 실패:', e.message));
@@ -47,6 +49,7 @@ async function orderDateRows({ field, from, to, q, done }) {
 async function autoProcess(row) {
   if (!AUTO_PROCESS || !shop || !ADMIN_TOKEN) return null;
   if (String(row.sender || '').startsWith('[테스트]')) return null; // 가짜 입금은 절대 자동 처리하지 않는다
+  if (!isBankFormat(row.raw)) { console.error('자동 처리 보류(카카오뱅크 형식 아님):', row.id, String(row.raw).slice(0, 60)); return null; } // 이메일 등 다른 글
   // 같은 입금자·금액의 다른 입금이 30분 안에 있으면 중복 수신일 수 있으므로 자동 처리하지 않고 사람이 확인하게 둔다(이중 처리 방지).
   if (db.similarNear(row, 30 * 60_000)) { console.error('자동 처리 보류(같은 입금자·금액 30분 내 중복):', row.id, row.sender, row.amount); return null; }
   const related = await shop.relatedFor({ sender: row.sender, amount: row.amount });
@@ -172,6 +175,13 @@ const server = http.createServer(async (req, res) => {
       let payload;
       try { payload = JSON.parse(body); } catch { payload = { text: body }; }
       const parsed = parseNotification({ title: payload.title, text: payload.text });
+      if (parsed && BANK_ACCOUNTS.length) {
+        const acc = accountOf(parsed.raw);
+        if (acc && !BANK_ACCOUNTS.includes(acc)) {
+          console.error('다른 계좌 입금(무시):', acc, parsed.sender, parsed.amount);
+          return json(res, 200, { ok: true, ignored: true, reason: 'other_account' });
+        }
+      }
       if (!parsed) {
         // 입금으로 못 읽은 요청은 원인 확인용으로 앞부분만 남긴다(문자 형식 변경·단축어 설정 오류 진단).
         console.error('입금 아님(무시):', JSON.stringify(String(payload.title || '') + ' | ' + String(payload.text ?? '')).slice(0, 300));

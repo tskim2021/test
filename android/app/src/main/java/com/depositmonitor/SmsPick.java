@@ -20,7 +20,20 @@ final class SmsPick {
 
     static String norm(String s) { return s == null ? "" : s.replaceAll("\\s+", " ").trim(); }
 
-    static boolean isDepositSms(String t) { return t.contains("카카오뱅크") && t.contains("입금"); }
+    /** 카카오뱅크가 보낸 입금 문자 형식("[카카오뱅크] … 입금 N원"). 이메일 등에 '카카오뱅크'라는 말이 들어간 것은 제외. */
+    static boolean isDepositSms(String t) { return t.contains("[카카오뱅크]") && t.matches("(?s).*입금\\s*[\\d,]+\\s*원.*"); }
+
+    /** 카카오뱅크 문자 발신번호 1599-3333 */
+    static boolean isBankSender(String s) { return s != null && s.replaceAll("[^0-9]", "").endsWith("15993333"); }
+
+    /** 문자 앱 알림인지(삼성 메시지, 구글 메시지, 기본 문자 앱 등). Gmail·메신저 알림은 제외. */
+    static boolean isMessagingApp(String pkg) {
+        if (pkg == null) return false;
+        String p = pkg.toLowerCase();
+        return p.equals("com.samsung.android.messaging") || p.equals("com.google.android.apps.messaging")
+            || p.equals("com.android.mms") || p.equals("com.android.messaging") || p.contains(".mms") || p.contains("sms")
+            || (p.contains("messag") && !p.contains("gm") && !p.contains("facebook") && !p.contains("kakao") && !p.contains("telegram") && !p.contains("whatsapp"));
+    }
 
     /** 본문의 "월/일 시:분"(한국시간)을 epoch ms 로. 없으면 -1. 연도는 now 기준(연말·연초 경계 보정). */
     static long bodyTime(String t, long now) {

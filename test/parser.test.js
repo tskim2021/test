@@ -34,3 +34,18 @@ test('카카오뱅크 SMS(iPhone 단축어로 전달)', () => {
   assert.equal(r.amount, 1000); assert.equal(r.sender, '김미희');
   assert.equal(sms('10/30 17:00\n출금 5,000원\n스타벅스\n잔액 1,000원'), null);
 });
+
+test('카카오뱅크 형식 판별과 계좌 끝자리', async () => {
+  const { isBankFormat, accountOf } = await import('../parser.js');
+  const sms = '[Web발신] [카카오뱅크] 노*유(4063) 11/03 10:39 입금 32,300원 김영동';
+  const app = '입금 40,300원 박상중 → 입출금통장(4063)';
+  const mail = 'Re: AMEYOKO 아메요꼬 1:1문의 답변 알림 메일 입금자 농협(정수범) 3022014208751 87100원 입금 완료했습니다. 카카오뱅크';
+  assert.equal(isBankFormat(sms), true);
+  assert.equal(isBankFormat(app), true);
+  assert.equal(isBankFormat(mail), false);
+  assert.equal(isBankFormat('[카카오뱅크]\n노*유(3916)\n11/03 10:28\n입금 99,000원\n윤형철'), true);
+  assert.equal(accountOf(sms), '4063');
+  assert.equal(accountOf(app), '4063');
+  assert.equal(accountOf('[Web발신]\n[카카오뱅크]\n노*유(3916)\n11/03 10:28\n입금 99,000원\n윤형철'), '3916');
+  assert.equal(accountOf(mail), null);
+});
