@@ -19,7 +19,7 @@ final class Store {
     Store(Context c) {
         p = c.getApplicationContext().getSharedPreferences("deposit-monitor", Context.MODE_PRIVATE);
         // 설정 포함 APK: 처음 실행 때 미리 넣은 서버 주소·토큰을 폰에 저장한다(나중에 설정 없는 버전으로 업데이트해도 유지되게).
-        if (!p.contains("url") && !BuildConfig.PRESET_URL.isEmpty()) {
+        if (p.getString("url", "").trim().isEmpty() && !BuildConfig.PRESET_URL.isEmpty()) { // 없거나 빈 값으로 저장돼 있으면
             p.edit().putString("url", BuildConfig.PRESET_URL).putString("token", BuildConfig.PRESET_TOKEN).commit();
         }
     }
