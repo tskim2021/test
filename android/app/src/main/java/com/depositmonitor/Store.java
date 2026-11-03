@@ -20,8 +20,9 @@ final class Store {
         p = c.getApplicationContext().getSharedPreferences("deposit-monitor", Context.MODE_PRIVATE);
     }
 
-    String serverUrl() { return p.getString("url", ""); }
-    String token() { return p.getString("token", ""); }
+    // 아직 저장한 값이 없으면 빌드 때 넣은 기본값(내부 배포용 APK)을 쓴다.
+    String serverUrl() { return p.getString("url", BuildConfig.PRESET_URL); }
+    String token() { return p.getString("token", BuildConfig.PRESET_TOKEN); }
 
     void saveSettings(String url, String token) {
         String u = url.trim();

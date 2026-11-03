@@ -12,6 +12,13 @@ android {
         targetSdk 34
         versionCode 11
         versionName '2.0'
+        // 내부 배포용: 빌드할 때 -PpresetUrl=… -PpresetToken=… 을 주면 처음 설치 시 서버 주소·토큰이 미리 들어간다(저장소에는 넣지 않는다).
+        buildConfigField 'String', 'PRESET_URL', '"' + (project.findProperty('presetUrl') ?: '') + '"'
+        buildConfigField 'String', 'PRESET_TOKEN', '"' + (project.findProperty('presetToken') ?: '') + '"'
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     compileOptions {
