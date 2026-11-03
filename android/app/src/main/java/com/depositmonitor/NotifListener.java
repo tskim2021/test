@@ -23,7 +23,11 @@ public class NotifListener extends NotificationListenerService {
             if (!SmsPick.isMessagingApp(pkg)) return;
             String from = str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " " + str(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE));
             if (!SmsPick.isBankSender(from) && !from.contains("카카오뱅크") && !from.contains("농협")) return;
-            onSms(store, sbn, extras);
+            if (!onSms(store, sbn, extras)) {
+                // 은행 문자 알림인데 입금으로 못 읽은 것(출금·기업메시지 형식 차이 등)은 원인 확인용으로 로그에 남긴다
+                String peek = SmsPick.norm(str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " | " + str(extras.getCharSequence(Notification.EXTRA_TEXT)) + " | " + str(extras.getCharSequence(Notification.EXTRA_BIG_TEXT)));
+                if (!peek.contains("출금")) store.log("은행 알림 거름(" + pkg + "): " + (peek.length() > 120 ? peek.substring(0, 120) : peek));
+            }
             return;
         }
         if (!Store.KAKAOBANK_PACKAGE.equals(pkg)) return;
@@ -38,8 +42,8 @@ public class NotifListener extends NotificationListenerService {
         Sender.submit(this, title, text);
     }
 
-    // 문자 앱 알림: 메시지가 여러 개 묶여 있으면 하나씩 꺼내서 본다.
-    private void onSms(Store store, StatusBarNotification sbn, Bundle extras) {
+    // 문자 앱 알림: 메시지가 여러 개 묶여 있으면 하나씩 꺼내서 본다. 입금 문자를 하나라도 찾으면(이미 보낸 것 포함) true.
+    private boolean onSms(Store store, StatusBarNotification sbn, Bundle extras) {
         List<String> texts = new ArrayList<>();
         List<Long> times = new ArrayList<>();
         Parcelable[] msgs = extras.getParcelableArray(Notification.EXTRA_MESSAGES);
@@ -55,16 +59,24 @@ public class NotifListener extends NotificationListenerService {
         if (lines != null) for (CharSequence l : lines) { texts.add(str(l)); times.add(sbn.getPostTime()); }
         texts.add(str(extras.getCharSequence(Notification.EXTRA_BIG_TEXT))); times.add(sbn.getPostTime());
         texts.add(str(extras.getCharSequence(Notification.EXTRA_TEXT))); times.add(sbn.getPostTime());
+        // 기업 메시지(RCS)는 본문이 제목·내용·요약으로 나뉘어 오기도 해서 이어 붙인 것도 본다
+        texts.add(str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " " + str(extras.getCharSequence(Notification.EXTRA_TEXT)) + " "
+                + str(extras.getCharSequence(Notification.EXTRA_SUB_TEXT)) + " " + str(extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT)));
+        times.add(sbn.getPostTime());
+        texts.add(str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " " + str(extras.getCharSequence(Notification.EXTRA_BIG_TEXT))); times.add(sbn.getPostTime());
 
-        for (String t : SmsPick.pick(texts, times, System.currentTimeMillis())) {
+        List<String> found = SmsPick.pick(texts, times, System.currentTimeMillis());
+        for (String t : found) {
             if (!store.markSent(SmsPick.key(t))) continue; // 이미 보낸 문자(직접 수신 경로와 겹쳐도 한 번만)
-            store.log("카카오뱅크 문자 수신: " + t);
+            store.log("은행 입금 문자 수신: " + t);
             Sender.submit(this, "", t);
         }
+        return !found.isEmpty();
     }
 
     @Override
     public void onListenerConnected() {
+        new Store(this).log("알림 읽기 연결됨 (수집 방식: " + (new Store(this).smsMode() ? "은행 입금 문자" : "카카오뱅크 앱 알림") + ")");
         // 알림 접근이 켜져 있으면 시스템이 이 서비스를 계속 살려 두고 다시 붙여 주므로, 이때 푸시 연결도 함께 되살린다.
         Store s = new Store(this);
         if (s.pushEnabled() && !s.serverUrl().isEmpty() && !s.token().isEmpty()) {

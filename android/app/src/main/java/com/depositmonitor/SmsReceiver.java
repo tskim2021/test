@@ -25,7 +25,7 @@ public class SmsReceiver extends BroadcastReceiver {
         long now = System.currentTimeMillis();
         for (String t : SmsPick.pick(Collections.singletonList(body.toString()), Collections.singletonList(now), now)) {
             if (!store.markSent(SmsPick.key(t))) continue;
-            store.log("카카오뱅크 문자 수신(직접): " + t);
+            store.log("은행 입금 문자 수신(직접): " + t);
             Sender.submit(c, "", t);
         }
     }

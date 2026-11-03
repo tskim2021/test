@@ -216,7 +216,7 @@ public class MainActivity extends Activity {
         }));
 
         Switch sms = new Switch(this);
-        sms.setText("카카오뱅크 입금 문자로 받기 (끄면 카카오뱅크 앱 알림으로 받음)");
+        sms.setText("은행 입금 문자로 받기 (카카오뱅크·농협, 끄면 카카오뱅크 앱 알림으로 받음)");
         sms.setChecked(store.smsMode());
         sms.setPadding(0, dp(8), 0, dp(8));
         sms.setOnCheckedChangeListener((CompoundButton b, boolean on) -> {
@@ -351,7 +351,7 @@ public class MainActivity extends Activity {
         String url = store.serverUrl();
         String warn = url.startsWith("http://") ? "\n⚠ http:// 는 토큰이 암호화되지 않습니다. 가능하면 https 사용" : "";
         status.setText((enabled ? "알림 접근: 켜짐 ✅" : "알림 접근: 꺼짐 ❌ (아래 1번에서 허용)")
-                + "\n수집 방식: " + (store.smsMode() ? "카카오뱅크 입금 문자" : "카카오뱅크 앱 알림")
+                + "\n수집 방식: " + (store.smsMode() ? "은행 입금 문자(카카오뱅크·농협)" : "카카오뱅크 앱 알림")
                 + (store.smsMode() ? "\n문자 직접 수신: " + (smsGranted() ? "허용됨 ✅" : "꺼짐 ❌ (아래 4번에서 허용)") : "")
                 + "\n푸시: " + (store.pushEnabled() ? "켜짐" : "꺼짐")
                 + "\n푸시 연결: " + pushStateText()
