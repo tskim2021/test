@@ -10,6 +10,14 @@ const BASE = 'SELECT d.*, m.od_id AS order_id, m.manual AS order_manual, m.confi
 // done: 'hide'=처리된 입금 숨김, 'only'=처리된 입금만, 'all'=전부(기본)
 const doneCond = (done) => (done === 'hide' ? 'm.od_id IS NULL' : done === 'only' ? 'm.od_id IS NOT NULL' : null);
 
+// 문자 본문의 거래 시각(월/일 시:분)·입금액·입금자. 없으면 null(카카오뱅크 앱 알림 등은 기존 방식).
+export function smsKey(raw) {
+  const m = String(raw || '').replace(/\s+/g, ' ').match(/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2}).*?입금 ?([\d,]+) ?원 ?([^\s]*)/);
+  if (!m) return null;
+  const name = /^잔액/.test(m[6]) ? '' : m[6];
+  return `${+m[1]}/${+m[2]} ${+m[3]}:${m[4]}|${m[5].replace(/,/g, '')}|${name}`;
+}
+
 export function openDb(path = process.env.DB_PATH || './deposits.db') {
   const db = new DatabaseSync(path);
   db.exec(`
@@ -80,11 +88,18 @@ export function openDb(path = process.env.DB_PATH || './deposits.db') {
     // 같은 알림이 같은 분에 중복 전송돼도 한 번만 저장한다. 새로 저장됐으면 row, 중복이면 null.
     add({ amount, sender, balance, raw }, at = new Date()) {
       const iso = at.toISOString();
-      const key = createHash('sha1').update(`${raw}|${iso.slice(0, 16)}`).digest('hex');
+      // 카카오뱅크 문자처럼 본문에 거래 시각이 있으면 '연도+시각+금액+입금자'로 한 건을 구분한다.
+      // 같은 문자가 여러 경로(문자 직접 수신·문자 앱 알림·재전송)로 문구가 조금 다르게 와도 한 번만 저장돼 이중 처리가 생기지 않는다.
+      const sk = smsKey(raw);
+      const key = createHash('sha1').update(sk ? `sms|${iso.slice(0, 4)}|${sk}` : `${raw}|${iso.slice(0, 16)}`).digest('hex');
       const r = insert.run(key, amount, sender, balance, raw, iso);
       return r.changes ? byId.get(key) : null;
     },
     get: (id) => getOne.get(id),
+    // 같은 입금자·금액의 다른 입금(숨김 포함)이 ms 안에 들어온 적이 있으면 그 행
+    similarNear: (row, ms) => db.prepare(
+      `SELECT id FROM deposits WHERE id <> ? AND amount = ? AND IFNULL(sender,'') = IFNULL(?, '')
+         AND ABS(strftime('%s', received_at) - strftime('%s', ?)) * 1000 <= ? LIMIT 1`).get(row.id, row.amount, row.sender, row.received_at, ms) || null,
     getMeta: (k) => metaGet.get(k)?.v ?? null,
     setMeta: (k, v) => metaSet.run(k, String(v)),
     // 자동 처리 대상: 기준 시각 이후에 들어왔고 아직 처리되지 않은(숨김 제외) 입금, 오래된 것부터

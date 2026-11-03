@@ -47,10 +47,18 @@ async function orderDateRows({ field, from, to, q, done }) {
 async function autoProcess(row) {
   if (!AUTO_PROCESS || !shop || !ADMIN_TOKEN) return null;
   if (String(row.sender || '').startsWith('[테스트]')) return null; // 가짜 입금은 절대 자동 처리하지 않는다
+  // 같은 입금자·금액의 다른 입금이 30분 안에 있으면 중복 수신일 수 있으므로 자동 처리하지 않고 사람이 확인하게 둔다(이중 처리 방지).
+  if (db.similarNear(row, 30 * 60_000)) { console.error('자동 처리 보류(같은 입금자·금액 30분 내 중복):', row.id, row.sender, row.amount); return null; }
   const related = await shop.relatedFor({ sender: row.sender, amount: row.amount });
   if (related.full.length !== 1) return null;
   const o = related.full[0];
   if ((o.od_misu_krw ?? o.od_misu) !== row.amount) return null; // 허용 오차(±100원) 안이어도 자동은 정확히 같을 때만
+  // 입금보다 30분 넘게 늦게 생긴 주문은 이 입금의 주문이 아닐 수 있으므로(같은 고객의 재주문 등) 자동 처리하지 않는다.
+  const orderAt = Date.parse(String(o.od_time || '').replace(' ', 'T') + '+09:00'); // 쇼핑몰 주문 시각은 한국시간 문자열
+  if (Number.isFinite(orderAt) && orderAt - Date.parse(row.received_at) > 30 * 60_000) {
+    console.error('자동 처리 보류(주문이 입금보다 30분 넘게 늦음):', row.id, row.sender, row.amount, o.od_id);
+    return null;
+  }
   if (!db.claim(row.id, o.od_id, 0)) return null;
   const note = `입금 ${row.sender || '(입금자 미확인)'} ${row.amount.toLocaleString('ko-KR')}원 확인 → ${shop.statusPaid} 처리 (자동)`;
   try {
@@ -71,7 +79,9 @@ async function sweepAuto() {
   if (sweeping || !AUTO_PROCESS || !shop || !ADMIN_TOKEN) return;
   sweeping = true;
   try {
-    for (const r of db.unprocessedSince(db.getMeta('auto_since'), 100)) await autoProcess(r);
+    // 최근 1시간 안의 미처리 입금만 다시 본다(오래된 입금·중복 입금이 나중에 생긴 같은 금액 주문을 처리해 버리지 않게).
+    const since = new Date(Math.max(Date.parse(db.getMeta('auto_since')) || 0, Date.now() - 60 * 60_000)).toISOString();
+    for (const r of db.unprocessedSince(since, 100)) await autoProcess(r);
   } catch (e) { console.error('자동 처리 점검 실패:', e.message); } finally { sweeping = false; }
 }
 if (AUTO_PROCESS && shop) setInterval(sweepAuto, Number(process.env.AUTO_SWEEP_MS || 60_000)).unref();

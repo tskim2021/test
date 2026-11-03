@@ -33,15 +33,22 @@ final class Store {
     boolean smsMode() { return p.getBoolean("sms_mode", true); }
     void setSmsMode(boolean on) { p.edit().putBoolean("sms_mode", on).apply(); }
 
-    /** 보낸 적 없는 문자면 기록하고 true. 같은 문자가 알림 갱신으로 다시 보여도 한 번만 보낸다(최근 300건 기억). */
-    synchronized boolean markSent(String text) {
+    private static final Object SENT_LOCK = new Object();
+
+    /** 보낸 적 없는 문자면 기록하고 true. 같은 문자가 알림 갱신·직접 수신 두 경로로 와도 한 번만 보낸다(최근 300건 기억).
+     *  두 경로는 서로 다른 Store 객체로 거의 동시에 들어오므로, 클래스 전체 잠금 + 즉시 저장(commit)으로 확인과 기록을 한 번에 한다. */
+    boolean markSent(String text) {
+        synchronized (SENT_LOCK) { return markSentLocked(text); }
+    }
+
+    private boolean markSentLocked(String text) {
         try {
             JSONArray a = new JSONArray(p.getString("sms_sent", "[]"));
             for (int i = 0; i < a.length(); i++) if (text.equals(a.getString(i))) return false;
             JSONArray out = new JSONArray();
             for (int i = Math.max(0, a.length() - 299); i < a.length(); i++) out.put(a.get(i));
             out.put(text);
-            p.edit().putString("sms_sent", out.toString()).apply();
+            p.edit().putString("sms_sent", out.toString()).commit();
             return true;
         } catch (Exception e) { return true; }
     }

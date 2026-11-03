@@ -198,3 +198,29 @@ test('메타 값 저장과 자동 처리 대상(기준 시각 이후, 미처리�
   db.claim(c.id, 'A1', 0);
   assert.deepEqual(db.unprocessedSince(db.getMeta('auto_since')).map((r) => r.sender), ['이후']);
 });
+
+test('같은 카카오뱅크 문자가 다른 문구·다른 시각으로 두 번 와도 한 건만 저장(이중 처리 방지)', async () => {
+  const { openDb, smsKey } = await import('../db.js');
+  const db = openDb(':memory:');
+  const viaNotif = '[Web발신] [카카오뱅크] 노*유(4063) 10/31 10:05 입금 55,500원 정홍진 잔액 1,000원';
+  const viaSms = '[카카오뱅크] 노*유(4063) 10/31 10:05 입금 55,500원 정홍진'; // 앞머리·잔액이 빠진 형태
+  assert.equal(smsKey(viaNotif), smsKey(viaSms));
+  assert.ok(db.add({ amount: 55500, sender: '정홍진', balance: 1000, raw: viaNotif }, new Date('2026-10-31T01:05:10Z')));
+  assert.equal(db.add({ amount: 55500, sender: '정홍진', balance: null, raw: viaSms }, new Date('2026-10-31T01:07:40Z')), null); // 2분 뒤 다른 문구 → 중복
+  // 같은 사람이 다른 금액, 또는 다른 시각에 보낸 것은 별개 입금
+  assert.ok(db.add({ amount: 33200, sender: '정홍진', balance: null, raw: '[카카오뱅크] 노*유(4063) 10/31 10:05 입금 33,200원 정홍진' }));
+  assert.ok(db.add({ amount: 55500, sender: '정홍진', balance: null, raw: '[카카오뱅크] 노*유(4063) 10/31 10:20 입금 55,500원 정홍진' }));
+  // 문자 시각이 없는 카카오뱅크 앱 알림은 기존 방식(같은 분 같은 문구만 중복)
+  assert.equal(smsKey('입금 50,000원 홍길동 잔액 1,234,000원'), null);
+});
+
+test('같은 입금자·금액 30분 내 다른 입금 찾기(자동 처리 보류용)', async () => {
+  const { openDb } = await import('../db.js');
+  const db = openDb(':memory:');
+  const a = db.add({ amount: 55500, sender: '정홍진', balance: null, raw: '입금 55,500원 정홍진 A' }, new Date('2026-10-31T01:00:00Z'));
+  const b = db.add({ amount: 55500, sender: '정홍진', balance: null, raw: '입금 55,500원 정홍진 B' }, new Date('2026-10-31T01:20:00Z'));
+  const c = db.add({ amount: 55500, sender: '정홍진', balance: null, raw: '입금 55,500원 정홍진 C' }, new Date('2026-10-31T03:00:00Z'));
+  assert.equal(db.similarNear(b, 30 * 60_000).id, a.id);
+  assert.equal(db.similarNear(c, 30 * 60_000), null);
+  assert.equal(db.similarNear(a, 30 * 60_000).id, b.id);
+});
