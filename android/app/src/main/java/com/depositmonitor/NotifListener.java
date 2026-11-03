@@ -22,7 +22,12 @@ public class NotifListener extends NotificationListenerService {
             // 문자 앱 알림만, 그리고 보낸 사람이 은행(카카오뱅크 1599-3333, NH농협 1588-2100 또는 저장된 이름)인 것만 본다(이메일 등 제외)
             if (!SmsPick.isMessagingApp(pkg)) return;
             String from = str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " " + str(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE));
-            if (!SmsPick.isBankSender(from) && !from.contains("카카오뱅크") && !from.contains("농협")) return;
+            if (!SmsPick.isBankSender(from) && !from.contains("카카오뱅크") && !from.contains("농협")) {
+                // 보낸 사람 표시가 은행이 아닌데 본문이 은행 입금 형식이면 보내지는 않고 원인 확인용으로만 기록(기업 메시지는 제목이 '알림' 등으로 올 수 있음)
+                String all = SmsPick.norm(from + " | " + str(extras.getCharSequence(Notification.EXTRA_TEXT)) + " | " + str(extras.getCharSequence(Notification.EXTRA_BIG_TEXT)));
+                if (all.contains("입금")) store.log("은행 확인 안 됨(" + pkg + ") 보낸사람=[" + from.trim() + "] " + (all.length() > 120 ? all.substring(0, 120) : all));
+                return;
+            }
             if (!onSms(store, sbn, extras)) {
                 // 은행 문자 알림인데 입금으로 못 읽은 것(출금·기업메시지 형식 차이 등)은 원인 확인용으로 로그에 남긴다
                 String peek = SmsPick.norm(str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " | " + str(extras.getCharSequence(Notification.EXTRA_TEXT)) + " | " + str(extras.getCharSequence(Notification.EXTRA_BIG_TEXT)));
