@@ -12,10 +12,15 @@ const doneCond = (done) => (done === 'hide' ? 'm.od_id IS NULL' : done === 'only
 
 // 문자 본문의 거래 시각(월/일 시:분)·입금액·입금자. 없으면 null(카카오뱅크 앱 알림 등은 기존 방식).
 export function smsKey(raw) {
-  const m = String(raw || '').replace(/\s+/g, ' ').match(/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2}).*?입금 ?([\d,]+) ?원 ?([^\s]*)/);
-  if (!m) return null;
-  const name = /^잔액/.test(m[6]) ? '' : m[6];
-  return `${+m[1]}/${+m[2]} ${+m[3]}:${m[4]}|${m[5].replace(/,/g, '')}|${name}`;
+  const t = String(raw || '').replace(/\s+/g, ' ');
+  const w = t.match(/(\d{1,2})\/(\d{1,2}) (\d{1,2}):(\d{2})/);
+  const a = t.match(/입금 ?([\d,]+) ?원/);
+  if (!w || !a) return null;
+  // 입금자: 카카오뱅크는 시각 뒤 '입금 N원' 다음, 농협은 계좌번호(352-****-6720-13) 다음
+  const nh = t.match(/ \d+-\*+-[\d-]+ (.+?)(?: 잔액 ?[\d,]+ ?원|$)/);
+  const kb = t.slice(w.index).match(/입금 ?[\d,]+ ?원 ?([^\s]*)/);
+  const name = nh ? nh[1] : kb && !/^잔액/.test(kb[1]) ? kb[1] : '';
+  return `${+w[1]}/${+w[2]} ${+w[3]}:${w[4]}|${a[1].replace(/,/g, '')}|${name}`;
 }
 
 export function openDb(path = process.env.DB_PATH || './deposits.db') {

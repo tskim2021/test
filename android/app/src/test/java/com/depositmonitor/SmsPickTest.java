@@ -66,4 +66,17 @@ public class SmsPickTest {
         assertFalse(SmsPick.isMessagingApp("com.google.android.gm"));
         assertFalse(SmsPick.isMessagingApp("com.kakao.talk"));
     }
+
+    @Test public void 농협_문자() {
+        String nh = "[Web발신]\n농협 입금165,500원\n11/03 21:15\n352-****-6720-13\n정상목\n잔액1,824,970원";
+        assertTrue(SmsPick.isDepositSms(nh));
+        assertFalse(SmsPick.isDepositSms("[Web발신]\n농협 출금900원\n11/03 21:14\n352-****-6720-13\n잔액1,659,470원"));
+        assertTrue(SmsPick.isBankSender("1588-2100"));
+        assertEquals("11/03 21:15|165,500|정상목", SmsPick.key(nh));
+        assertEquals(SmsPick.key(nh), SmsPick.key("농협 입금165,500원 11/03 21:15 352-****-6720-13 정상목"));
+        long now = kst(2026, 11, 3, 21, 16);
+        assertEquals(1, SmsPick.pick(Arrays.asList(nh), Arrays.asList(now), now).size());
+        // 카카오뱅크 키는 그대로
+        assertEquals("10/31 10:05|55,500|정홍진", SmsPick.key("[카카오뱅크]\n노*유(4063)\n10/31 10:05\n입금 55,500원\n정홍진\n잔액 1,000원"));
+    }
 }

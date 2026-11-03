@@ -2,7 +2,7 @@ import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { timingSafeEqual } from 'node:crypto';
 import { openDb, isDate } from './db.js';
-import { parseNotification, isBankFormat, accountOf } from './parser.js';
+import { parseNotification, isBankFormat, accountOf, accountMatches } from './parser.js';
 import { createShop, orderKeys, relatedDepositIds } from './shop.js';
 import { buildChart } from './chart.js';
 import { createApns, isDeadToken, pushMessage } from './apns.js';
@@ -25,7 +25,7 @@ const shop = await createShop();
 
 // 자동 처리: 입금자명·금액이 쇼핑몰의 미입금 주문 '한 건'과 정확히 같으면 사람이 누르지 않아도 입금 처리한다. AUTO_PROCESS=0 으로 끈다.
 const AUTO_PROCESS = process.env.AUTO_PROCESS !== '0';
-// 받을 계좌 끝 4자리(쉼표로 여러 개). 설정하면 다른 계좌의 카카오뱅크 문자는 저장하지 않는다. 예: BANK_ACCOUNTS=4063
+// 받을 계좌 끝자리(쉼표로 여러 개). 설정하면 다른 계좌 문자는 저장하지 않는다. 예: BANK_ACCOUNTS=4063,6720-13 (카카오뱅크 괄호 숫자, 농협 계좌 뒷부분)
 const BANK_ACCOUNTS = (process.env.BANK_ACCOUNTS || '').split(',').map((s) => s.trim()).filter(Boolean);
 // 이 기능을 켜기 전에 이미 들어와 있던 입금은 자동 처리하지 않는다(AUTO_PROCESS_BACKFILL=1 이면 포함).
 if (!db.getMeta('auto_since')) db.setMeta('auto_since', process.env.AUTO_PROCESS_BACKFILL === '1' ? '1970-01-01T00:00:00.000Z' : new Date().toISOString());
@@ -177,7 +177,7 @@ const server = http.createServer(async (req, res) => {
       const parsed = parseNotification({ title: payload.title, text: payload.text });
       if (parsed && BANK_ACCOUNTS.length) {
         const acc = accountOf(parsed.raw);
-        if (acc && !BANK_ACCOUNTS.includes(acc)) {
+        if (acc && !accountMatches(acc, BANK_ACCOUNTS)) {
           console.error('다른 계좌 입금(무시):', acc, parsed.sender, parsed.amount);
           return json(res, 200, { ok: true, ignored: true, reason: 'other_account' });
         }

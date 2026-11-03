@@ -551,7 +551,7 @@ function smsBlock(raw) {
   const w = el('div', 'smsWrap'); w.append(el('div', 'sec', '입금 문자(원문)'));
   const t = String(raw || '');
   if (!t || /^\[(직접입력|테스트)\]/.test(t)) { w.append(el('div', 'smsBox none', t.startsWith('[테스트]') ? '테스트로 만든 가짜 입금입니다' : '직접 입력한 입금이라 문자 원문이 없습니다')); return w; }
-  const lines = t.replace(/\s*(\[카카오뱅크\]|\d{1,2}\/\d{1,2} \d{1,2}:\d{2}|(?:입금|출금) [\d,]+원|잔액 [\d,]+원)\s*/g, '\n$1\n').replace(/\n+/g, '\n').trim();
+  const lines = t.replace(/\s*(\[카카오뱅크\]|농협 ?(?:입금|출금) ?[\d,]+원|\d{1,2}\/\d{1,2} \d{1,2}:\d{2}|\d+-\*+-[\d-]+|(?:입금|출금) ?[\d,]+원|잔액 ?[\d,]+원)\s*/g, '\n$1\n').replace(/\n+/g, '\n').trim();
   w.append(el('div', 'smsBox', lines)); return w;
 }
 function openDetail(d) {

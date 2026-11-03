@@ -21,10 +21,19 @@ final class SmsPick {
     static String norm(String s) { return s == null ? "" : s.replaceAll("\\s+", " ").trim(); }
 
     /** 카카오뱅크가 보낸 입금 문자 형식("[카카오뱅크] … 입금 N원"). 이메일 등에 '카카오뱅크'라는 말이 들어간 것은 제외. */
-    static boolean isDepositSms(String t) { return t.contains("[카카오뱅크]") && t.matches("(?s).*입금\\s*[\\d,]+\\s*원.*"); }
+    static boolean isDepositSms(String t) {
+        if (t.contains("[카카오뱅크]")) return t.matches("(?s).*입금\\s*[\\d,]+\\s*원.*");
+        // 농협: "농협 입금165,500원 11/03 21:15 352-****-6720-13 정상목 잔액…"
+        return NH.matcher(norm(t)).find();
+    }
+    private static final Pattern NH = Pattern.compile("농협\\s*입금\\s*[\\d,]+\\s*원\\s+\\d{1,2}/\\d{1,2}\\s+\\d{1,2}:\\d{2}\\s+\\d+-\\*+-[\\d-]+\\s+\\S");
 
-    /** 카카오뱅크 문자 발신번호 1599-3333 */
-    static boolean isBankSender(String s) { return s != null && s.replaceAll("[^0-9]", "").endsWith("15993333"); }
+    /** 은행 문자 발신번호: 카카오뱅크 1599-3333, NH농협 1588-2100 */
+    static boolean isBankSender(String s) {
+        if (s == null) return false;
+        String d = s.replaceAll("[^0-9]", "");
+        return d.endsWith("15993333") || d.endsWith("15882100"); // 카카오뱅크, NH농협
+    }
 
     /** 문자 앱 알림인지(삼성 메시지, 구글 메시지, 기본 문자 앱 등). Gmail·메신저 알림은 제외. */
     static boolean isMessagingApp(String pkg) {
@@ -51,10 +60,13 @@ final class SmsPick {
     }
 
     private static final Pattern KEY = Pattern.compile("(\\d{1,2}/\\d{1,2}\\s+\\d{1,2}:\\d{2}).*?입금\\s*([\\d,]+)\\s*원\\s*([^\\s]*)");
+    private static final Pattern NH_KEY = Pattern.compile("입금\\s*([\\d,]+)\\s*원\\s+(\\d{1,2}/\\d{1,2}\\s+\\d{1,2}:\\d{2})\\s+\\d+-\\*+-[\\d-]+\\s+(.+?)(?:\\s+잔액.*)?$");
 
     /** 같은 입금 문자인지 판단하는 키(시각·금액·입금자). 문자 앱 알림과 직접 수신의 앞머리([Web발신] 등)가 달라도 같게 나온다. */
     static String key(String t) {
         String n = norm(t);
+        Matcher h = NH_KEY.matcher(n); // 농협: 입금액이 시각보다 먼저
+        if (h.find()) return h.group(2).replaceAll("\\s+", " ") + "|" + h.group(1) + "|" + h.group(3);
         Matcher m = KEY.matcher(n);
         return m.find() ? m.group(1).replaceAll("\\s+", " ") + "|" + m.group(2) + "|" + (m.group(3).startsWith("잔액") ? "" : m.group(3)) : n;
     }

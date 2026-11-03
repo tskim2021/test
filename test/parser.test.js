@@ -49,3 +49,26 @@ test('카카오뱅크 형식 판별과 계좌 끝자리', async () => {
   assert.equal(accountOf('[Web발신]\n[카카오뱅크]\n노*유(3916)\n11/03 10:28\n입금 99,000원\n윤형철'), '3916');
   assert.equal(accountOf(mail), null);
 });
+
+test('농협 입금 문자', async () => {
+  const { isBankFormat, accountOf, accountMatches } = await import('../parser.js');
+  const { smsKey } = await import('../db.js');
+  const t = '[Web발신]\n농협 입금165,500원\n11/03 21:15\n352-****-6720-13\n정상목\n잔액1,824,970원';
+  const r = parseNotification({ title: '', text: t });
+  assert.equal(r.amount, 165500); assert.equal(r.sender, '정상목'); assert.equal(r.balance, 1824970);
+  assert.equal(isBankFormat(r.raw), true);
+  assert.equal(accountOf(r.raw), '6720-13');
+  assert.equal(accountMatches('6720-13', ['4063', '6720-13']), true);
+  assert.equal(accountMatches('4063', ['6720-13']), false);
+  assert.equal(accountMatches('3916', ['4063', '6720-13']), false);
+  // 알림 머리글이 붙거나 잔액 줄이 없어도
+  const r2 = parseNotification({ title: 'NH농협', text: '[Web발신]\n알림\n농협 입금30,000원\n11/03 22:01\n352-****-6720-13\n김 철수' });
+  assert.equal(r2.sender, '김 철수'); assert.equal(r2.amount, 30000); assert.equal(isBankFormat(r2.raw), true);
+  // 출금은 무시
+  assert.equal(parseNotification({ title: '', text: '[Web발신]\n농협 출금900원\n11/03 21:14\n352-****-6720-13\n잔액1,659,470원' }), null);
+  // 같은 문자 두 경로 → 같은 키
+  assert.equal(smsKey(r.raw), smsKey('농협 입금165,500원 11/03 21:15 352-****-6720-13 정상목'));
+  assert.equal(smsKey(r.raw), '11/3 21:15|165500|정상목');
+  // 카카오뱅크 키는 그대로
+  assert.equal(smsKey('[Web발신] [카카오뱅크] 노*유(4063) 10/31 10:05 입금 55,500원 정홍진 잔액 1,000원'), '10/31 10:05|55500|정홍진');
+});

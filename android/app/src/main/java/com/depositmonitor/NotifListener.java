@@ -19,10 +19,10 @@ public class NotifListener extends NotificationListenerService {
         Store store = new Store(this);
         Bundle extras = sbn.getNotification().extras;
         if (store.smsMode()) {
-            // 문자 앱 알림만, 그리고 보낸 사람이 카카오뱅크(1599-3333 또는 저장된 이름 '카카오뱅크')인 것만 본다(이메일 등 제외)
+            // 문자 앱 알림만, 그리고 보낸 사람이 은행(카카오뱅크 1599-3333, NH농협 1588-2100 또는 저장된 이름)인 것만 본다(이메일 등 제외)
             if (!SmsPick.isMessagingApp(pkg)) return;
             String from = str(extras.getCharSequence(Notification.EXTRA_TITLE)) + " " + str(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE));
-            if (!SmsPick.isBankSender(from) && !from.contains("카카오뱅크")) return;
+            if (!SmsPick.isBankSender(from) && !from.contains("카카오뱅크") && !from.contains("농협")) return;
             onSms(store, sbn, extras);
             return;
         }
