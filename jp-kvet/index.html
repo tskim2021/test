@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>K-VET JAPAN | 全国の動物病院検索</title>
+<meta name="description" content="日本全国の動物病院を地図と一覧から検索できるサービス。">
+<link rel="stylesheet" href="css/style.css"></head><body>
+<header class="hdr"><a class="brand" href="index.html">K-<b>VET</b><small data-i18n="brandSub">JAPAN</small></a>
+<nav class="nav"><a class="on" href="index.html" data-i18n="navHome">ホーム</a><a href="map.html" data-i18n="navFind">動物病院を探す</a><span class="dis"><span data-i18n="navCost">診療費の目安</span><i data-i18n="soon">準備中</i></span><span class="dis"><span data-i18n="navGuide">犬・猫図鑑</span><i data-i18n="soon">準備中</i></span></nav>
+<div class="lang"><button class="lang-btn" data-lang="ja">日本語</button><button class="lang-btn" data-lang="ko">한국어</button></div></header>
+<main><section class="hero">
+<h1 data-i18n="heroTitle">ペットの病院探し、かんたんに</h1>
+<p data-i18n="heroSub"></p><p class="cnt" id="cnt"></p>
+<div class="qa">
+<span class="off"><div class="ic">🧾</div><span data-i18n="qaReceipt"></span><em data-i18n="soon"></em></span>
+<span class="off"><div class="ic">💴</div><span data-i18n="qaCost"></span><em data-i18n="soon"></em></span>
+<a class="hot" href="map.html"><div class="ic">📍</div><span data-i18n="qaFind"></span></a>
+<span class="off"><div class="ic">📖</div><span data-i18n="qaGuide"></span><em data-i18n="soon"></em></span>
+<span class="off"><div class="ic">🪪</div><span data-i18n="qaId"></span><em data-i18n="soon"></em></span>
+<span class="off"><div class="ic">📔</div><span data-i18n="qaDiary"></span><em data-i18n="soon"></em></span></div>
+<form class="sbox" id="f"><input id="q" data-i18n-ph="homeSearchPh" autocomplete="off"><button class="btn" data-i18n="homeSearchBtn"></button></form>
+<div class="note" id="koNote" hidden></div>
+<div class="chips"><h3 data-i18n="popular"></h3><div id="pop"></div></div>
+</section><p class="foot" data-i18n="footNote"></p></main>
+<script src="js/i18n.js"></script>
+<script>
+var AREAS=['東京都','神奈川県','大阪府','愛知県','北海道','福岡県','埼玉県','千葉県','兵庫県','京都府','沖縄県'];
+function link(q){return 'map.html?q='+encodeURIComponent(q)}
+document.getElementById('f').addEventListener('submit',function(e){e.preventDefault();location.href=link(document.getElementById('q').value.trim())});
+var DATA=null;
+function render(){
+  var pop=document.getElementById('pop');pop.textContent='';
+  AREAS.forEach(function(a){var el=document.createElement('a');el.href=link(a);
+    el.textContent=DATA?I18N.prefName(DATA.prefectures.indexOf(a),a):a;pop.appendChild(el)});
+  if(DATA)document.getElementById('cnt').textContent=I18N.t('heroCount',{n:DATA.items.length.toLocaleString()});
+  document.getElementById('koNote').textContent=I18N.t('koNote');
+}
+fetch('data/vets.json').then(function(r){return r.json()}).then(function(d){DATA=d;render()});
+document.addEventListener('DOMContentLoaded',render);document.addEventListener('langchange',render);
+</script></body></html>

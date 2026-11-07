@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>動物病院を探す | K-VET JAPAN</title>
+<link rel="stylesheet" href="css/style.css"></head><body class="finder">
+<header class="hdr"><a class="brand" href="index.html">K-<b>VET</b><small data-i18n="brandSub">JAPAN</small></a>
+<nav class="nav"><a href="index.html" data-i18n="navHome">ホーム</a><a class="on" href="map.html" data-i18n="navFind">動物病院を探す</a><span class="dis"><span data-i18n="navCost">診療費の目安</span><i data-i18n="soon">準備中</i></span><span class="dis"><span data-i18n="navGuide">犬・猫図鑑</span><i data-i18n="soon">準備中</i></span></nav>
+<div class="lang"><button class="lang-btn" data-lang="ja">日本語</button><button class="lang-btn" data-lang="ko">한국어</button></div></header>
+<div class="app">
+<div id="map"></div>
+<div class="mapmsg" id="mapmsg" hidden><div><b id="mm-t"></b><span id="mm-b"></span></div></div>
+<aside class="panel">
+ <div class="p-head"><h2><span data-i18n="finderTitle"></span><span class="tag" data-i18n="mapChip"></span></h2>
+  <label class="search">🔍<input id="q" data-i18n-ph="searchPh" autocomplete="off"></label>
+  <select class="sel" id="pref"></select>
+  <div class="rad" id="rad"><button data-r="loc" data-i18n="near"></button><button data-r="2" data-i18n="r2"></button><button data-r="5" data-i18n="r5"></button><button data-r="10" data-i18n="r10"></button><button data-r="0" class="on" data-i18n="rAll"></button></div>
+  <div class="note" id="koNote" hidden style="margin-top:8px"></div></div>
+ <div class="cnt-line" id="cnt"></div>
+ <div class="list" id="list"></div>
+</aside>
+<section class="detail" id="detail">
+ <div class="d-top"><span data-i18n="detailTitle"></span><button class="x" id="dx" aria-label="close">✕</button></div>
+ <div class="d-body"><span class="d-tag" data-i18n="tagVet"></span><h3 id="d-name"></h3><div class="loc" id="d-loc"></div>
+  <div class="acts"><a id="a-call" href="#"><span class="c">📞</span><span data-i18n="call"></span></a><a id="a-route" target="_blank" rel="noopener"><span class="c">🧭</span><span data-i18n="route"></span></a><button id="a-share"><span class="c">🔗</span><span data-i18n="share"></span></button><button id="a-copy"><span class="c">📋</span><span data-i18n="copyAddr"></span></button></div></div>
+ <div class="d-sec"><h4 data-i18n="basic"></h4><div id="d-rows"></div><p class="disc" data-i18n="disclaimer"></p></div>
+</section>
+<button class="locbtn" id="locbtn" aria-label="現在地">◎</button>
+</div><div class="toast" id="toast"></div>
+<script src="js/config.js"></script><script src="js/i18n.js"></script><script src="js/finder.js"></script>
+</body></html>
