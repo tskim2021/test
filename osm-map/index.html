@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>일본 동물병원·정비소 지도</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css">
+<style>
+  html,body,#map{height:100%;margin:0}
+  #panel{position:absolute;z-index:1000;top:10px;right:10px;background:#fff;padding:10px 12px;border-radius:8px;
+    box-shadow:0 1px 6px rgba(0,0,0,.3);font:13px/1.5 system-ui,sans-serif;max-width:240px}
+  #panel label{display:block;cursor:pointer}
+  #panel input[type=search]{width:100%;box-sizing:border-box;margin:6px 0;padding:4px}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:4px}
+  .pop b{font-size:14px}
+  .tag{font-size:11px;color:#666}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="panel">
+  <b>표시 대상</b>
+  <label><input type="checkbox" id="chkVet" checked><span class="dot" style="background:#1976d2"></span>동물병원 <span id="nVet"></span></label>
+  <label><input type="checkbox" id="chkRep" checked><span class="dot" style="background:#e65100"></span>정비소 <span id="nRep"></span></label>
+  <input type="search" id="q" placeholder="이름·주소 검색 (예: 渋谷)">
+  <div class="tag" id="stat"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<script src="vets_data.js"></script>
+<script src="repair_data.js" onerror="void 0"></script>
+<script>
+// 행 형식: [이름, 도도부현, 시구정촌, 주소, 전화, 웹사이트, 경도, 위도, 출처]
+const SETS = {
+  vet: {rows: typeof VETS !== 'undefined' ? VETS : [], color: '#1976d2', chk: 'chkVet', n: 'nVet'},
+  rep: {rows: typeof REPAIR !== 'undefined' ? REPAIR : [], color: '#e65100', chk: 'chkRep', n: 'nRep'},
+};
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : null;
+
+const map = L.map('map').setView([36.2, 138.2], 5);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    + ' | 병원 데이터: Overture Maps, OpenStreetMap'
+}).addTo(map);
+
+for (const k in SETS) {
+  const s = SETS[k];
+  s.layer = L.markerClusterGroup({chunkedLoading: true});
+  s.layer.addTo(map);
+  document.getElementById(s.n).textContent = s.rows.length ? `(${s.rows.length.toLocaleString()})` : '(데이터 없음)';
+}
+
+function popup(r) {
+  const url = safeUrl(r[5]);
+  return `<div class="pop"><b>${esc(r[0])}</b><br>${esc(r[1])} ${esc(r[2])} ${esc(r[3])}`
+    + (r[4] ? `<br>☎ ${esc(r[4])}` : '')
+    + (url ? `<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">웹사이트</a>` : '')
+    + `<br><span class="tag">출처: ${esc(r[8])}</span></div>`;
+}
+
+function render() {
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  let shown = 0;
+  for (const k in SETS) {
+    const s = SETS[k];
+    s.layer.clearLayers();
+    if (!document.getElementById(s.chk).checked) continue;
+    const ms = [];
+    for (const r of s.rows) {
+      if (q && !((r[0] || '') + (r[1] || '') + (r[2] || '') + (r[3] || '')).toLowerCase().includes(q)) continue;
+      ms.push(L.circleMarker([r[7], r[6]], {radius: 6, color: '#fff', weight: 1, fillColor: s.color, fillOpacity: .9})
+        .bindPopup(() => popup(r)));
+    }
+    s.layer.addLayers(ms);
+    shown += ms.length;
+  }
+  document.getElementById('stat').textContent = `${shown.toLocaleString()}건 표시`;
+}
+let t; document.getElementById('q').addEventListener('input', () => { clearTimeout(t); t = setTimeout(render, 250); });
+['chkVet', 'chkRep'].forEach(id => document.getElementById(id).addEventListener('change', render));
+render();
+</script>
+</body>
+</html>
