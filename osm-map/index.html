@@ -57,7 +57,7 @@ for (const k in SETS) {
 
 function popup(r) {
   const url = safeUrl(r[5]);
-  return `<div class="pop"><b>${esc(r[0])}</b><br>${esc(r[1])} ${esc(r[2])} ${esc(r[3])}`
+  return `<div class="pop"><b>${esc(r[0] || '(이름 없음)')}</b><br>${esc(r[1])} ${esc(r[2])} ${esc(r[3])}`
     + (r[4] ? `<br>☎ ${esc(r[4])}` : '')
     + (url ? `<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">웹사이트</a>` : '')
     + `<br><span class="tag">출처: ${esc(r[8])}</span></div>`;
